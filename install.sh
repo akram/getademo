@@ -123,6 +123,81 @@ check_ffmpeg() {
     fi
 }
 
+# Check and install window management tools
+check_window_tools() {
+    info "Checking window management tools..."
+    
+    case "$OS" in
+        macos)
+            # macOS uses built-in osascript (AppleScript) - no extra deps needed
+            success "macOS: Using built-in AppleScript (osascript)"
+            ;;
+        linux)
+            # Linux needs wmctrl and xdotool for window management
+            MISSING_TOOLS=()
+            
+            if ! command -v wmctrl &> /dev/null; then
+                MISSING_TOOLS+=("wmctrl")
+            fi
+            if ! command -v xdotool &> /dev/null; then
+                MISSING_TOOLS+=("xdotool")
+            fi
+            
+            if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
+                warn "Missing window management tools: ${MISSING_TOOLS[*]}"
+                echo ""
+                echo "These tools are needed for window-based recording (capture_mode='window')."
+                echo "Without them, you can still use full-screen recording with focus_window()."
+                echo ""
+                
+                read -p "Would you like to install them now? (y/n) " -n 1 -r
+                echo ""
+                
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    info "Installing window management tools..."
+                    if command -v apt &> /dev/null; then
+                        sudo apt update && sudo apt install -y wmctrl xdotool
+                    elif command -v dnf &> /dev/null; then
+                        sudo dnf install -y wmctrl xdotool
+                    elif command -v pacman &> /dev/null; then
+                        sudo pacman -S --noconfirm wmctrl xdotool
+                    elif command -v zypper &> /dev/null; then
+                        sudo zypper install -y wmctrl xdotool
+                    else
+                        warn "Could not detect package manager. Please install manually:"
+                        echo "  wmctrl xdotool"
+                        echo ""
+                        echo "Installation commands for common distros:"
+                        echo "  Ubuntu/Debian: sudo apt install wmctrl xdotool"
+                        echo "  Fedora/RHEL:   sudo dnf install wmctrl xdotool"
+                        echo "  Arch:          sudo pacman -S wmctrl xdotool"
+                        echo "  openSUSE:      sudo zypper install wmctrl xdotool"
+                    fi
+                    
+                    # Verify installation
+                    if command -v wmctrl &> /dev/null && command -v xdotool &> /dev/null; then
+                        success "Window management tools installed successfully"
+                    else
+                        warn "Some tools may not have installed correctly. Window-based recording may not work."
+                    fi
+                else
+                    warn "Skipping window tools installation."
+                    info "You can still use capture_mode='screen' with focus_window() for recording."
+                fi
+            else
+                success "Linux: wmctrl and xdotool are available"
+            fi
+            ;;
+        windows)
+            # Windows uses built-in ctypes (Win32 API) - no extra deps needed
+            success "Windows: Using built-in Win32 API (ctypes)"
+            ;;
+        *)
+            warn "Unknown OS: Window management tools may not work."
+            ;;
+    esac
+}
+
 # Create virtual environment and install package
 install_package() {
     info "Setting up Python virtual environment..."
@@ -322,7 +397,8 @@ print_summary() {
     echo "  - Cursor config: $CURSOR_CONFIG_DIR/mcp.json"
     echo ""
     echo "Available tools:"
-    echo "  - start_recording / stop_recording"
+    echo "  - start_recording / stop_recording (screen, window, or region mode)"
+    echo "  - list_windows / focus_window / get_window_bounds"
     echo "  - text_to_speech (OpenAI or Edge TTS)"
     echo "  - adjust_video_to_audio_length"
     echo "  - concatenate_videos"
@@ -337,6 +413,7 @@ main() {
     detect_os
     check_python
     check_ffmpeg
+    check_window_tools
     install_package
     configure_cursor
     check_screen_permission

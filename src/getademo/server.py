@@ -23,6 +23,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 from .protocol import get_protocol
+from . import window_manager
 
 # Global state for recording
 _recording_process: Optional[subprocess.Popen] = None
@@ -49,7 +50,7 @@ def get_ffmpeg_path() -> str:
 
 
 def get_screen_capture_args(screen_index: int = 1) -> list[str]:
-    """Get platform-specific screen capture arguments for ffmpeg.
+    """Get platform-specific FULL SCREEN capture arguments for ffmpeg.
     
     Args:
         screen_index: Screen device index for macOS (1=first screen, 2=second screen).
@@ -80,6 +81,101 @@ def get_screen_capture_args(screen_index: int = 1) -> list[str]:
         raise RuntimeError(f"Unsupported platform: {sys.platform}")
 
 
+def get_region_capture_args(x: int, y: int, width: int, height: int, screen_index: int = 1) -> list[str]:
+    """Get platform-specific REGION capture arguments for ffmpeg.
+    
+    Args:
+        x: X coordinate of top-left corner
+        y: Y coordinate of top-left corner
+        width: Width of capture region
+        height: Height of capture region
+        screen_index: Screen device index (macOS only)
+    """
+    if sys.platform == "darwin":  # macOS
+        # AVFoundation doesn't support region directly, capture full and crop
+        return [
+            "-f", "avfoundation",
+            "-capture_cursor", "1",
+            "-framerate", "30",
+            "-pixel_format", "uyvy422",
+            "-i", f"{screen_index}:none",
+        ], f"crop={width}:{height}:{x}:{y}"  # Returns args and crop filter
+    elif sys.platform == "linux":
+        display = os.environ.get("DISPLAY", ":0")
+        return [
+            "-f", "x11grab",
+            "-video_size", f"{width}x{height}",
+            "-i", f"{display}.0+{x},{y}",
+        ], None
+    elif sys.platform == "win32":
+        return [
+            "-f", "gdigrab",
+            "-offset_x", str(x),
+            "-offset_y", str(y),
+            "-video_size", f"{width}x{height}",
+            "-i", "desktop",
+        ], None
+    else:
+        raise RuntimeError(f"Unsupported platform: {sys.platform}")
+
+
+def get_window_capture_args(window_title: str) -> tuple[list[str], Optional[str], Optional[str]]:
+    """Get platform-specific WINDOW capture arguments for ffmpeg.
+    
+    Args:
+        window_title: Window title pattern to match
+        
+    Returns:
+        Tuple of (ffmpeg_args, crop_filter, error_message)
+        If error_message is set, the other values should be ignored.
+    """
+    if sys.platform == "darwin":  # macOS
+        # Get the CGWindowID for the window
+        window_id = window_manager.get_window_id(window_title)
+        if not window_id:
+            return [], None, f"Window '{window_title}' not found. Use list_windows to see available windows."
+        
+        # Use screencapture to capture specific window, pipe to ffmpeg
+        # Unfortunately, ffmpeg AVFoundation doesn't support window capture directly
+        # We'll use a workaround: focus the window and capture full screen
+        # Or use region-based capture with window bounds
+        try:
+            bounds = window_manager.get_window_bounds(window_title)
+            # Use region capture with the window's bounds
+            args, crop = get_region_capture_args(bounds.x, bounds.y, bounds.width, bounds.height)
+            return args, crop, None
+        except Exception as e:
+            return [], None, f"Could not get window bounds: {e}"
+    
+    elif sys.platform == "linux":
+        # Linux x11grab can capture by window ID
+        window_id = window_manager.get_window_id(window_title)
+        if not window_id:
+            return [], None, f"Window '{window_title}' not found. Use list_windows to see available windows."
+        
+        # Get window bounds for proper sizing
+        try:
+            bounds = window_manager.get_window_bounds(window_title)
+            display = os.environ.get("DISPLAY", ":0")
+            return [
+                "-f", "x11grab",
+                "-video_size", f"{bounds.width}x{bounds.height}",
+                "-i", f"{display}.0+{bounds.x},{bounds.y}",
+            ], None, None
+        except Exception as e:
+            return [], None, f"Could not get window bounds: {e}"
+    
+    elif sys.platform == "win32":
+        # Windows gdigrab supports capture by window title
+        return [
+            "-f", "gdigrab",
+            "-i", f"title={window_title}",
+        ], None, None
+    
+    else:
+        return [], None, f"Unsupported platform: {sys.platform}"
+
+
 # Create the MCP server
 server = Server("getademo")
 
@@ -90,7 +186,7 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="start_recording",
-            description="Start screen recording. Returns immediately while recording runs in background.",
+            description="Start recording. Supports multiple capture modes: full screen, specific window by title, or a screen region. Returns immediately while recording runs in background.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -98,14 +194,34 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Full path where the video will be saved (e.g., /path/to/demo.mp4)"
                     },
+                    "capture_mode": {
+                        "type": "string",
+                        "enum": ["screen", "window", "region"],
+                        "description": "What to capture: 'screen' (full screen), 'window' (specific window by title), 'region' (x,y,w,h area). Default: screen",
+                        "default": "screen"
+                    },
+                    "window_title": {
+                        "type": "string",
+                        "description": "Window title pattern (regex) - required for 'window' mode. E.g., 'Chrome.*', 'Simulator', 'Firefox'"
+                    },
+                    "capture_region": {
+                        "type": "object",
+                        "properties": {
+                            "x": {"type": "integer", "description": "X coordinate of top-left corner"},
+                            "y": {"type": "integer", "description": "Y coordinate of top-left corner"},
+                            "width": {"type": "integer", "description": "Width of capture region"},
+                            "height": {"type": "integer", "description": "Height of capture region"}
+                        },
+                        "description": "Screen region to capture - required for 'region' mode. Use get_window_bounds to get values."
+                    },
                     "width": {
                         "type": "integer",
-                        "description": "Recording width in pixels (default: 1920)",
+                        "description": "Output width in pixels (default: 1920). For region mode, defaults to region width.",
                         "default": 1920
                     },
                     "height": {
                         "type": "integer",
-                        "description": "Recording height in pixels (default: 1080)",
+                        "description": "Output height in pixels (default: 1080). For region mode, defaults to region height.",
                         "default": 1080
                     },
                     "fps": {
@@ -115,7 +231,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "screen_index": {
                         "type": "integer",
-                        "description": "Screen device index (macOS: 1=screen 0, 2=screen 1; default: 1)",
+                        "description": "Screen device index for 'screen' mode (macOS: 1=screen 0, 2=screen 1; default: 1)",
                         "default": 1
                     }
                 },
@@ -354,6 +470,62 @@ async def list_tools() -> list[Tool]:
                 "required": []
             }
         ),
+        # Window Management Tools
+        Tool(
+            name="list_windows",
+            description="List all visible windows on the system. Returns window titles, IDs, PIDs, and bounds. Useful for finding the correct window title pattern before recording.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
+        Tool(
+            name="focus_window",
+            description="Bring a window to the foreground by title pattern. Use before screen recording to ensure the target window is visible. The pattern is a case-insensitive regex.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "title_pattern": {
+                        "type": "string",
+                        "description": "Regex pattern to match window title (e.g., 'Chrome.*', 'Simulator', 'Firefox')"
+                    }
+                },
+                "required": ["title_pattern"]
+            }
+        ),
+        Tool(
+            name="get_window_bounds",
+            description="Get the position and size of a window by title pattern. Returns x, y, width, height. Useful for region-based recording.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "title_pattern": {
+                        "type": "string",
+                        "description": "Regex pattern to match window title (e.g., 'Chrome.*', 'Simulator')"
+                    }
+                },
+                "required": ["title_pattern"]
+            }
+        ),
+        Tool(
+            name="check_window_tools",
+            description="Check if window management tools are available on this system. Returns platform info and any missing dependencies.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
+        Tool(
+            name="list_screens",
+            description="List all available screens/displays with their index, resolution, and position. Use this for multi-monitor setups to find the correct screen_index for recording. On macOS: index 1 is usually the main/built-in display, index 2+ are external displays.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
     ]
 
 
@@ -399,6 +571,22 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         elif name == "get_demo_protocol":
             return [TextContent(type="text", text=get_protocol())]
         
+        # Window Management Tools
+        elif name == "list_windows":
+            return await _list_windows()
+        
+        elif name == "focus_window":
+            return await _focus_window(arguments)
+        
+        elif name == "get_window_bounds":
+            return await _get_window_bounds_tool(arguments)
+        
+        elif name == "check_window_tools":
+            return await _check_window_tools()
+        
+        elif name == "list_screens":
+            return await _list_screens()
+        
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     
@@ -407,7 +595,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 
 async def _start_recording(args: dict) -> list[TextContent]:
-    """Start screen recording."""
+    """Start recording with support for multiple capture modes."""
     global _recording_process, _recording_path, _recording_start_time
     
     if _recording_process is not None and _recording_process.poll() is None:
@@ -416,18 +604,85 @@ async def _start_recording(args: dict) -> list[TextContent]:
     output_path = Path(args["output_path"])
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    width = args.get("width", 1920)
-    height = args.get("height", 1080)
+    capture_mode = args.get("capture_mode", "screen")
+    window_title = args.get("window_title")
+    capture_region = args.get("capture_region")
     fps = args.get("fps", 30)
     screen_index = args.get("screen_index", 1)
     
     ffmpeg = get_ffmpeg_path()
+    capture_args = []
+    crop_filter = None
+    mode_info = ""
     
-    # Build command - note: on macOS, we capture at native resolution and scale
+    # Determine capture arguments based on mode
+    if capture_mode == "window":
+        if not window_title:
+            return [TextContent(type="text", text="Error: window_title is required for 'window' capture mode.")]
+        
+        # First, try to focus the window to ensure it's visible
+        try:
+            window_manager.focus_window(window_title)
+            await asyncio.sleep(0.3)  # Brief delay for window to come to front
+        except Exception:
+            pass  # Continue anyway, window might still be capturable
+        
+        capture_args, crop_filter, error = get_window_capture_args(window_title)
+        if error:
+            return [TextContent(type="text", text=f"Window capture error: {error}")]
+        
+        # Get window bounds for output size
+        try:
+            bounds = window_manager.get_window_bounds(window_title)
+            width = args.get("width", bounds.width)
+            height = args.get("height", bounds.height)
+            mode_info = f"Window: {window_title}\nWindow size: {bounds.width}x{bounds.height}"
+        except Exception:
+            width = args.get("width", 1920)
+            height = args.get("height", 1080)
+            mode_info = f"Window: {window_title}"
+    
+    elif capture_mode == "region":
+        if not capture_region:
+            return [TextContent(type="text", text="Error: capture_region is required for 'region' capture mode.")]
+        
+        try:
+            region_x = capture_region["x"]
+            region_y = capture_region["y"]
+            region_w = capture_region["width"]
+            region_h = capture_region["height"]
+        except KeyError as e:
+            return [TextContent(type="text", text=f"Error: capture_region missing required field: {e}")]
+        
+        result = get_region_capture_args(region_x, region_y, region_w, region_h, screen_index)
+        if isinstance(result, tuple) and len(result) == 2:
+            capture_args, crop_filter = result
+        else:
+            capture_args = result
+            crop_filter = None
+        
+        width = args.get("width", region_w)
+        height = args.get("height", region_h)
+        mode_info = f"Region: x={region_x}, y={region_y}, w={region_w}, h={region_h}"
+    
+    else:  # capture_mode == "screen" (default)
+        capture_args = get_screen_capture_args(screen_index)
+        width = args.get("width", 1920)
+        height = args.get("height", 1080)
+        mode_info = f"Full screen (screen {screen_index})"
+    
+    # Build video filter
+    video_filters = []
+    if crop_filter:
+        video_filters.append(crop_filter)
+    video_filters.append(f"scale={width}:{height}")
+    vf_string = ",".join(video_filters)
+    
+    # Build command
     cmd = [
         ffmpeg, "-y",
-        *get_screen_capture_args(screen_index),
-        "-vf", f"scale={width}:{height}",
+        *capture_args,
+        "-vf", vf_string,
         "-c:v", "libx264",
         "-preset", "ultrafast",
         "-crf", "23",
@@ -469,9 +724,10 @@ async def _start_recording(args: dict) -> list[TextContent]:
     return [TextContent(
         type="text",
         text=f"Recording started!\n"
+             f"Mode: {capture_mode}\n"
+             f"{mode_info}\n"
              f"Output: {output_path}\n"
              f"Resolution: {width}x{height} @ {fps}fps\n"
-             f"Screen: {screen_index}\n"
              f"Started at: {_recording_start_time.strftime('%H:%M:%S')}\n\n"
              f"Use 'stop_recording' when done."
     )]
@@ -487,17 +743,58 @@ async def _stop_recording() -> list[TextContent]:
     if _recording_process.poll() is not None:
         return [TextContent(type="text", text="Recording already stopped.")]
     
-    # Send 'q' to ffmpeg to stop gracefully
-    try:
-        _recording_process.stdin.write(b'q')
-        _recording_process.stdin.flush()
-        _recording_process.wait(timeout=10)
-    except:
-        _recording_process.terminate()
-        _recording_process.wait(timeout=5)
-    
     duration = (datetime.now() - _recording_start_time).total_seconds() if _recording_start_time else 0
     output_path = _recording_path
+    
+    # Stop ffmpeg gracefully - multiple approaches for reliability
+    stopped = False
+    
+    # Method 1: Send 'q' to stdin (graceful stop)
+    try:
+        if _recording_process.stdin:
+            _recording_process.stdin.write(b'q')
+            _recording_process.stdin.flush()
+            # Use asyncio to wait without blocking
+            for _ in range(30):  # Wait up to 3 seconds
+                await asyncio.sleep(0.1)
+                if _recording_process.poll() is not None:
+                    stopped = True
+                    break
+    except (BrokenPipeError, OSError):
+        pass  # stdin may be closed
+    
+    # Method 2: Send SIGINT (Ctrl+C equivalent)
+    if not stopped:
+        try:
+            import signal
+            _recording_process.send_signal(signal.SIGINT)
+            for _ in range(20):  # Wait up to 2 seconds
+                await asyncio.sleep(0.1)
+                if _recording_process.poll() is not None:
+                    stopped = True
+                    break
+        except (ProcessLookupError, OSError):
+            pass
+    
+    # Method 3: SIGTERM
+    if not stopped:
+        try:
+            _recording_process.terminate()
+            for _ in range(20):  # Wait up to 2 seconds
+                await asyncio.sleep(0.1)
+                if _recording_process.poll() is not None:
+                    stopped = True
+                    break
+        except (ProcessLookupError, OSError):
+            pass
+    
+    # Method 4: Force kill
+    if not stopped:
+        try:
+            _recording_process.kill()
+            await asyncio.sleep(0.5)
+        except (ProcessLookupError, OSError):
+            pass
     
     # Reset state
     _recording_process = None
@@ -505,7 +802,10 @@ async def _stop_recording() -> list[TextContent]:
     _recording_start_time = None
     
     # Check file size
-    file_size = output_path.stat().st_size / (1024 * 1024) if output_path.exists() else 0
+    try:
+        file_size = output_path.stat().st_size / (1024 * 1024) if output_path and output_path.exists() else 0
+    except Exception:
+        file_size = 0
     
     return [TextContent(
         type="text",
@@ -978,6 +1278,226 @@ async def _adjust_video_to_audio_length(args: dict) -> list[TextContent]:
              f"Size: {file_size:.1f} MB\n"
              f"ALL visual content preserved (no frames cut)"
     )]
+
+
+# =============================================================================
+# Window Management Tool Implementations
+# =============================================================================
+
+async def _list_windows() -> list[TextContent]:
+    """List all visible windows."""
+    try:
+        windows = window_manager.list_windows()
+        
+        if not windows:
+            return [TextContent(type="text", text="No visible windows found.")]
+        
+        output = f"Found {len(windows)} visible windows:\n\n"
+        for i, win in enumerate(windows, 1):
+            output += f"{i}. {win.title}\n"
+            if win.app_name:
+                output += f"   App: {win.app_name}\n"
+            output += f"   ID: {win.window_id}\n"
+            if win.pid:
+                output += f"   PID: {win.pid}\n"
+            if win.bounds:
+                output += f"   Bounds: x={win.bounds.x}, y={win.bounds.y}, "
+                output += f"w={win.bounds.width}, h={win.bounds.height}\n"
+            output += "\n"
+        
+        return [TextContent(type="text", text=output)]
+    
+    except window_manager.DependencyMissingError as e:
+        return [TextContent(type="text", text=f"Missing dependencies: {str(e)}")]
+    except window_manager.WindowManagerError as e:
+        return [TextContent(type="text", text=f"Error listing windows: {str(e)}")]
+
+
+async def _focus_window(args: dict) -> list[TextContent]:
+    """Focus a window by title pattern."""
+    title_pattern = args.get("title_pattern")
+    if not title_pattern:
+        return [TextContent(type="text", text="Error: title_pattern is required")]
+    
+    try:
+        window_manager.focus_window(title_pattern)
+        return [TextContent(
+            type="text",
+            text=f"Window focused successfully!\n"
+                 f"Pattern: {title_pattern}\n\n"
+                 f"The matching window should now be in the foreground."
+        )]
+    
+    except window_manager.WindowNotFoundError:
+        return [TextContent(
+            type="text",
+            text=f"No window found matching '{title_pattern}'.\n\n"
+                 f"Use list_windows to see available windows."
+        )]
+    except window_manager.DependencyMissingError as e:
+        return [TextContent(type="text", text=f"Missing dependencies: {str(e)}")]
+    except window_manager.WindowManagerError as e:
+        return [TextContent(type="text", text=f"Error focusing window: {str(e)}")]
+
+
+async def _get_window_bounds_tool(args: dict) -> list[TextContent]:
+    """Get window bounds by title pattern."""
+    title_pattern = args.get("title_pattern")
+    if not title_pattern:
+        return [TextContent(type="text", text="Error: title_pattern is required")]
+    
+    try:
+        bounds = window_manager.get_window_bounds(title_pattern)
+        return [TextContent(
+            type="text",
+            text=f"Window bounds for '{title_pattern}':\n\n"
+                 f"  x: {bounds.x}\n"
+                 f"  y: {bounds.y}\n"
+                 f"  width: {bounds.width}\n"
+                 f"  height: {bounds.height}\n\n"
+                 f"Use these values with capture_mode='region' in start_recording."
+        )]
+    
+    except window_manager.WindowNotFoundError:
+        return [TextContent(
+            type="text",
+            text=f"No window found matching '{title_pattern}'.\n\n"
+                 f"Use list_windows to see available windows."
+        )]
+    except window_manager.DependencyMissingError as e:
+        return [TextContent(type="text", text=f"Missing dependencies: {str(e)}")]
+    except window_manager.WindowManagerError as e:
+        return [TextContent(type="text", text=f"Error getting bounds: {str(e)}")]
+
+
+async def _check_window_tools() -> list[TextContent]:
+    """Check window management tool availability."""
+    deps = window_manager.check_dependencies()
+    
+    output = f"Window Management Tools Status\n"
+    output += f"{'=' * 40}\n\n"
+    output += f"Platform: {deps['platform']}\n"
+    output += f"Available: {'Yes' if deps['available'] else 'No'}\n"
+    output += f"Message: {deps['message']}\n"
+    
+    if deps['missing']:
+        output += f"\nMissing tools: {', '.join(deps['missing'])}\n"
+        
+        if deps['platform'] == 'linux':
+            output += f"\nTo install:\n"
+            output += f"  Ubuntu/Debian: sudo apt install wmctrl xdotool\n"
+            output += f"  Fedora/RHEL:   sudo dnf install wmctrl xdotool\n"
+            output += f"  Arch:          sudo pacman -S wmctrl xdotool\n"
+    
+    return [TextContent(type="text", text=output)]
+
+
+async def _list_screens() -> list[TextContent]:
+    """List available screens/displays for recording."""
+    import platform
+    
+    output = "Available Screens for Recording\n"
+    output += "=" * 40 + "\n\n"
+    
+    system = platform.system().lower()
+    
+    if system == "darwin":
+        # macOS: Use system_profiler to get display info
+        try:
+            result = subprocess.run(
+                ["system_profiler", "SPDisplaysDataType", "-json"],
+                capture_output=True, text=True, timeout=10
+            )
+            
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                displays = []
+                
+                # Parse the JSON to find displays
+                for gpu in data.get("SPDisplaysDataType", []):
+                    for display in gpu.get("spdisplays_ndrvs", []):
+                        display_info = {
+                            "name": display.get("_name", "Unknown"),
+                            "resolution": display.get("_spdisplays_resolution", "Unknown"),
+                            "main": display.get("spdisplays_main") == "spdisplays_yes",
+                            "online": display.get("spdisplays_status") == "spdisplays_status_ok"
+                        }
+                        displays.append(display_info)
+                
+                if displays:
+                    output += "Detected displays:\n\n"
+                    for i, d in enumerate(displays, 1):
+                        main_marker = " (MAIN)" if d["main"] else ""
+                        output += f"  Screen {i}{main_marker}:\n"
+                        output += f"    Name: {d['name']}\n"
+                        output += f"    Resolution: {d['resolution']}\n"
+                        output += f"    Online: {'Yes' if d['online'] else 'No'}\n\n"
+                    
+                    output += "FFmpeg screen_index mapping:\n"
+                    output += "  - screen_index=1: Usually the MAIN display (built-in)\n"
+                    output += "  - screen_index=2: Usually the first external display\n"
+                    output += "  - screen_index=3: Third display, etc.\n\n"
+                    
+                    output += "IMPORTANT for multi-monitor setups:\n"
+                    output += "  1. Check which screen your target window is on\n"
+                    output += "  2. Use the corresponding screen_index in start_recording\n"
+                    output += "  3. Or use region-based recording with window bounds\n"
+                else:
+                    output += "No displays found in system_profiler output.\n"
+            else:
+                output += f"Error running system_profiler: {result.stderr}\n"
+                
+        except Exception as e:
+            output += f"Error detecting displays: {str(e)}\n"
+            
+    elif system == "linux":
+        # Linux: Use xrandr
+        try:
+            result = subprocess.run(
+                ["xrandr", "--query"],
+                capture_output=True, text=True, timeout=10
+            )
+            
+            if result.returncode == 0:
+                import re
+                lines = result.stdout.strip().split('\n')
+                screen_num = 1
+                
+                for line in lines:
+                    # Match connected displays with resolution
+                    match = re.match(r'(\S+) connected (?:primary )?(\d+x\d+)', line)
+                    if match:
+                        name = match.group(1)
+                        resolution = match.group(2)
+                        is_primary = "primary" in line
+                        primary_marker = " (PRIMARY)" if is_primary else ""
+                        
+                        output += f"  Screen {screen_num}{primary_marker}:\n"
+                        output += f"    Name: {name}\n"
+                        output += f"    Resolution: {resolution}\n\n"
+                        screen_num += 1
+                
+                output += "For FFmpeg on Linux, use the display name (e.g., ':0.0') or screen offset.\n"
+            else:
+                output += f"Error running xrandr: {result.stderr}\n"
+                
+        except FileNotFoundError:
+            output += "xrandr not found. Install with: sudo apt install x11-xserver-utils\n"
+        except Exception as e:
+            output += f"Error detecting displays: {str(e)}\n"
+            
+    elif system == "windows":
+        output += "Windows multi-monitor detection not yet implemented.\n"
+        output += "For now, use the Windows display settings to identify screen numbers.\n"
+    else:
+        output += f"Unsupported platform: {system}\n"
+    
+    output += "\nRecommendation for reliable multi-monitor recording:\n"
+    output += "  Use region-based recording with exact window bounds:\n"
+    output += "    1. Get window bounds: get_window_bounds(title_pattern='...')\n"
+    output += "    2. Record region: start_recording(capture_mode='region', capture_region={bounds})\n"
+    
+    return [TextContent(type="text", text=output)]
 
 
 async def main():

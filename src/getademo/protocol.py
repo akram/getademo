@@ -22,6 +22,43 @@ high-quality demos.
 These are **RULES** that MUST be followed. Failure to follow them will result in
 audio-video desync and poor quality demos.
 
+### RULE 0: SCREENSHOT VERIFICATION IS NON-NEGOTIABLE (THE GOLDEN RULE)
+
+**EVERY recording step MUST have screenshot verification BEFORE and AFTER.**
+
+This is the MOST IMPORTANT rule. Failure to follow this rule WILL result in 
+recording the wrong content (e.g., a cooking page instead of Google Maps).
+
+#### BEFORE Recording Each Step:
+```
+1. TAKE SCREENSHOT of the current browser/app state
+2. READ THE SCREENSHOT - actually look at it, don't just take it
+3. VERIFY: Is this the correct content for this step?
+   - If NO: Navigate/scroll to correct content, take another screenshot, verify again
+   - If YES: Proceed to recording
+4. NEVER start recording without visual confirmation of correct content
+```
+
+#### AFTER Recording Each Step:
+```
+1. TAKE SCREENSHOT immediately after stopping recording
+2. READ THE SCREENSHOT
+3. VERIFY: Did the recording capture the intended content?
+   - If NO: DELETE the recording and RE-RECORD the entire step
+   - If YES: Proceed to audio sync
+```
+
+#### FAILURE RECOVERY:
+If you recorded the wrong content:
+1. **IMMEDIATELY STOP** - do not continue to the next step
+2. **DELETE** the bad recording file
+3. **NAVIGATE** to the correct content
+4. **TAKE SCREENSHOT** to verify correct content
+5. **RE-RECORD** the entire step from scratch
+
+**WRONG**: Start recording -> hope it captures the right thing -> sync audio
+**RIGHT**: Screenshot -> verify correct content -> start recording -> stop -> screenshot -> verify -> sync audio
+
 ### RULE 1: ONE STEP = ONE VIDEO + ONE AUDIO
 
 Each demo step MUST have:
@@ -169,6 +206,85 @@ For demos showing clicks:
 3. CLICK the element
 4. WAIT for result
 
+### RULE 9: ENSURE BROWSER CONTENT FILLS THE VIEWPORT
+
+**The web page content MUST fill the entire browser viewport for professional demos.**
+
+Many web applications have responsive layouts that may leave empty space or not utilize
+the full screen. Before recording, verify the content fills the viewport properly.
+
+#### Pre-Recording Browser Optimization:
+
+```
+1. RESIZE browser viewport to recording resolution (e.g., 1920x1080)
+   - Use browser_resize(1920, 1080) or playwright_resize
+   
+2. TAKE SCREENSHOT and examine it:
+   - Does the content fill the full width?
+   - Is there excessive whitespace on the sides?
+   - Is the navigation/sidebar properly sized?
+
+3. IF content doesn't fill viewport, try these fixes:
+   a. ZOOM IN using browser zoom (Cmd/Ctrl + Plus):
+      - Execute: document.body.style.zoom = '125%' or '150%'
+      - Or press Cmd/Ctrl + Plus multiple times
+   
+   b. USE CSS to expand content width:
+      - Execute: document.querySelector('main').style.maxWidth = '100%'
+      - Or: document.body.style.maxWidth = 'none'
+   
+   c. HIDE unnecessary sidebars/panels if possible:
+      - Click collapse buttons
+      - Or: document.querySelector('.sidebar').style.display = 'none'
+   
+   d. ADJUST viewport to match content:
+      - If app is designed for 1280px, record at 1280x720 instead
+
+4. TAKE SCREENSHOT again to verify the fix worked
+
+5. ONLY proceed to recording when content fills the viewport properly
+```
+
+#### Common Viewport Issues and Fixes:
+
+| Issue | Solution |
+|-------|----------|
+| Content has max-width constraint | Execute JS: `document.querySelector('.container').style.maxWidth = 'none'` |
+| Large empty margins on sides | Zoom browser to 125% or 150% |
+| Sidebar takes too much space | Collapse or hide the sidebar before recording |
+| App designed for smaller screens | Record at the app's optimal resolution instead of 1920x1080 |
+| Fixed-width layout | Use region-based recording to capture only the content area |
+| Login/Auth pages with centered box | Zoom in or record at smaller resolution to fill frame |
+
+#### JavaScript Snippets for Common Fixes:
+
+**Remove max-width constraints:**
+```javascript
+document.querySelectorAll('*').forEach(el => {
+  if (getComputedStyle(el).maxWidth !== 'none') {
+    el.style.maxWidth = 'none';
+  }
+});
+```
+
+**Zoom the page content:**
+```javascript
+document.body.style.zoom = '125%';  // or '150%' for more zoom
+```
+
+**Expand main content area:**
+```javascript
+const main = document.querySelector('main, .main, #main, .content, #content');
+if (main) {
+  main.style.maxWidth = '100%';
+  main.style.width = '100%';
+  main.style.padding = '0 2rem';
+}
+```
+
+**WRONG**: Recording a page with content only using 60% of the screen width
+**RIGHT**: Adjusting zoom/CSS so content fills the viewport, or recording at optimal resolution
+
 ---
 
 ## MCP Tools Reference
@@ -178,7 +294,7 @@ For demos showing clicks:
 | Tool | Purpose |
 |------|---------|
 | `text_to_speech` | Generate voiceover audio (OpenAI/Edge TTS) |
-| `start_recording` | Start screen recording |
+| `start_recording` | Start recording (supports screen, window, or region modes) |
 | `stop_recording` | Stop recording and save file |
 | `recording_status` | Check if recording is in progress |
 | `adjust_video_to_audio_length` | **KEY TOOL**: Speed up/slow down video to match audio (preserves ALL frames) |
@@ -186,6 +302,55 @@ For demos showing clicks:
 | `get_media_info` | Get duration/resolution info |
 | `get_audio_duration` | Get exact audio duration |
 | `get_demo_protocol` | Retrieve this document |
+
+### Window Management Tools
+
+**IMPORTANT**: Use these tools to ensure you're recording the correct window!
+
+| Tool | Purpose |
+|------|---------|
+| `list_windows` | List all visible windows (titles, IDs, bounds) |
+| `focus_window` | Bring a window to the foreground by title pattern |
+| `get_window_bounds` | Get window position and size (x, y, width, height) |
+| `check_window_tools` | Check if window tools are available on this system |
+| `list_screens` | **MULTI-MONITOR**: List all displays with screen_index mapping |
+
+### Recording Capture Modes
+
+The `start_recording` tool supports three capture modes:
+
+| Mode | Description | Use When |
+|------|-------------|----------|
+| `screen` | Capture entire screen (default) | Recording full desktop, or after using `focus_window` |
+| `window` | Capture specific window by title | Recording browser, simulator, or any specific app |
+| `region` | Capture a specific screen area | Recording part of screen, use with `get_window_bounds` |
+
+**Recommended workflow for reliable recording:**
+
+1. **For browsers/apps**: Use `capture_mode="window"` with `window_title` pattern
+   ```
+   start_recording(
+     capture_mode="window",
+     window_title="Chrome.*",  # or "Firefox", "Simulator", etc.
+     output_path="/path/to/video.mp4"
+   )
+   ```
+
+2. **Focus + Screen (fallback)**: If window capture fails, focus first then record screen
+   ```
+   focus_window(title_pattern="Chrome.*")
+   start_recording(capture_mode="screen", output_path="/path/to/video.mp4")
+   ```
+
+3. **Region-based**: For precise control over what's captured
+   ```
+   bounds = get_window_bounds(title_pattern="MyApp")
+   start_recording(
+     capture_mode="region",
+     capture_region={"x": bounds.x, "y": bounds.y, "width": bounds.width, "height": bounds.height},
+     output_path="/path/to/video.mp4"
+   )
+   ```
 
 ### Browser Tools (from cursor-browser-extension MCP)
 
@@ -265,15 +430,101 @@ Before starting any demo:
 
 - [ ] **Screen Recording Permission**: Verify macOS System Settings -> Privacy & Security -> Screen Recording has your terminal/Cursor enabled
 - [ ] **Screen Resolution**: Set to 1920x1080 (Full HD) for best compatibility
+- [ ] **Window Tools Check**: Run `check_window_tools()` to verify dependencies are installed
+- [ ] **Identify Target Window**: Run `list_windows()` to find the correct window title pattern
+- [ ] **MULTI-MONITOR CHECK**: Run `list_screens()` to identify your displays
 - [ ] **Browser Setup**:
   - Use a clean browser profile or incognito mode
   - Hide bookmarks bar (Cmd+Shift+B in Chrome)
   - Hide extensions toolbar
   - Set browser to full-screen mode (Cmd+Shift+F or F11)
   - Close unnecessary tabs
+- [ ] **Viewport Content Check** (RULE 9):
+  - Take screenshot and verify content fills the full viewport
+  - If content has empty space on sides, zoom in (125-150%) or adjust CSS
+  - Remove max-width constraints if needed: `document.body.style.maxWidth = 'none'`
+  - For fixed-width apps, consider recording at the app's optimal resolution
 - [ ] **Desktop Cleanup**: Hide desktop icons, close unrelated applications
 - [ ] **Do Not Disturb**: Enable to prevent notification interruptions
 - [ ] **Output Directory**: Create a dedicated folder for the demo recordings
+
+### 1.1.0 CRITICAL: Multi-Monitor Setup
+
+**IF YOU HAVE MULTIPLE MONITORS, THIS SECTION IS MANDATORY!**
+
+Screen recording defaults to `screen_index=1` which is usually the MAIN/built-in display.
+If your target window is on a different display, you WILL record the wrong screen!
+
+**Step 1: Identify your screens**
+```
+list_screens()
+```
+This shows:
+- Screen 1 (MAIN): Usually built-in display
+- Screen 2: Usually first external monitor  
+- Screen 3+: Additional monitors
+
+**Step 2: Determine which screen your browser is on**
+- Look at where the browser window is physically located
+- OR use `get_window_bounds()` - x coordinates > main display width = external monitor
+
+**Step 3: Use the correct recording method**
+
+**RECOMMENDED: Region-based recording (most reliable)**
+```
+# This captures exactly the window, regardless of which screen it's on
+bounds = get_window_bounds(title_pattern="Chrome.*")
+start_recording(
+    capture_mode="region",
+    capture_region={"x": bounds.x, "y": bounds.y, "width": bounds.width, "height": bounds.height},
+    output_path="..."
+)
+```
+
+**ALTERNATIVE: Correct screen_index**
+```
+# If browser is on your external monitor (screen 2):
+start_recording(
+    capture_mode="screen",
+    screen_index=2,  # <-- Use the correct screen number!
+    output_path="..."
+)
+```
+
+**WRONG**: Recording screen 1 when browser is on screen 2 = recording wrong content!
+**RIGHT**: Either use region-based recording OR correct screen_index
+
+### 1.1.1 Ensuring Correct Window is Recorded
+
+**CRITICAL**: Before recording, ensure you're capturing the right window!
+
+1. **List available windows**:
+   ```
+   list_windows()
+   ```
+   This shows all visible windows with their titles - note the exact title pattern.
+
+2. **Choose your recording method**:
+   
+   **Option A - Window Mode (Recommended)**:
+   ```
+   start_recording(capture_mode="window", window_title="Chrome.*", output_path="...")
+   ```
+   This captures ONLY the matching window, regardless of what's on top.
+   
+   **Option B - Focus + Screen Mode**:
+   ```
+   focus_window(title_pattern="Chrome.*")
+   # Wait a moment for window to come to front
+   start_recording(capture_mode="screen", output_path="...")
+   ```
+   Use this if window mode has issues on your platform.
+
+3. **Verify bounds (optional)**:
+   ```
+   get_window_bounds(title_pattern="Chrome.*")
+   ```
+   Returns x, y, width, height - useful for region-based recording.
 
 ### 1.2 Demo Structure Planning
 
@@ -314,7 +565,7 @@ The result shows [outcome]."
 
 ### 2.1 Per-Step Workflow
 
-For EACH step in your demo:
+For EACH step in your demo, follow this EXACT sequence:
 
 ```
 PLANNING PHASE:
@@ -326,33 +577,52 @@ PLANNING PHASE:
 3. GENERATE TTS audio using text_to_speech tool
 4. NOTE the audio duration (returned by tool)
 
-PRE-RECORDING VERIFICATION:
-5. SCROLL to starting position using reliable method (scrollIntoView or PageDown)
-6. TAKE SCREENSHOT to verify correct position
-7. CHECK: Is the right content visible and centered?
-   - If NO -> scroll again and re-verify
-   - If YES -> proceed to recording
+PRE-RECORDING VERIFICATION (MANDATORY - DO NOT SKIP):
+5. IDENTIFY target window: list_windows() to get correct title pattern
+6. SCROLL/NAVIGATE to starting position
+7. *** TAKE SCREENSHOT ***
+8. *** READ THE SCREENSHOT - actually examine the image ***
+9. *** VERIFY: Is this the CORRECT content for this step? ***
+   - If NO: Navigate/scroll to correct content, GOTO step 7
+   - If YES: proceed to recording
+10. Focus the target window: focus_window(title_pattern="...")
 
 RECORDING PHASE:
-8. START screen recording using start_recording tool
-9. WAIT 2-3 seconds (viewer sees initial state)
-10. EXECUTE IN-RECORDING ACTIONS matching the narration:
+11. START recording using start_recording tool
+    - PREFERRED: capture_mode="window", window_title="YourApp.*"
+    - FALLBACK: focus_window() first, then capture_mode="screen"
+12. WAIT 2-3 seconds (viewer sees initial state)
+13. EXECUTE IN-RECORDING ACTIONS matching the narration:
     - SCROLL to reveal content as audio describes it
     - WAIT after each scroll (2 seconds minimum)
     - PAUSE on key information (3-5 seconds)
     - SHOW the results/output
-11. WAIT 2-3 seconds at end (viewer absorbs final state)
-12. STOP recording using stop_recording tool
+14. WAIT 2-3 seconds at end (viewer absorbs final state)
+15. STOP recording using stop_recording tool
 
-POST-RECORDING:
-13. ADJUST video speed to match audio using adjust_video_to_audio_length tool
+POST-RECORDING VERIFICATION (MANDATORY - DO NOT SKIP):
+16. *** TAKE SCREENSHOT ***
+17. *** READ THE SCREENSHOT - actually examine the image ***
+18. *** VERIFY: Did the recording end on the expected content? ***
+    - If NO: DELETE the raw recording, GOTO step 6
+    - If YES: proceed to audio sync
+
+AUDIO SYNC:
+19. ADJUST video speed to match audio using adjust_video_to_audio_length tool
     (This speeds up or slows down - NEVER cuts content)
-14. VERIFY: The final duration should match audio duration
-15. PROCEED to next step
+20. VERIFY: The final duration should match audio duration
+21. PROCEED to next step
 ```
 
-**IMPORTANT**: If scrolling during recording fails or content isn't showing correctly,
-DELETE the raw recording and RE-RECORD the entire step. Do not try to fix partial steps.
+**CRITICAL**: Steps marked with *** are NON-NEGOTIABLE. Skipping them WILL result in
+recording the wrong content and wasting time re-doing work.
+
+**IF RECORDING IS WRONG**: 
+1. DELETE the bad recording immediately
+2. Navigate to correct content
+3. Take screenshot to verify
+4. RE-RECORD the entire step from scratch
+Do NOT try to salvage or fix partial/wrong recordings.
 
 ### 2.2 Recording Best Practices
 
@@ -399,16 +669,38 @@ If re-recording step N changes timing or flow that affects later steps:
 
 | Issue | Solution |
 |-------|----------|
+| **RECORDED WRONG CONTENT** | YOU SKIPPED SCREENSHOT VERIFICATION! Delete recording, take screenshot, verify content, re-record |
+| **Recorded a different page/app** | Use `focus_window()` before recording, take screenshot to verify the correct window is focused |
+| **Cookie/consent dialog showing** | Handle dialogs BEFORE taking pre-recording screenshot - click accept/dismiss first |
 | Recording permission denied | System Settings -> Privacy -> Screen Recording, restart Cursor |
 | Audio too fast/slow | Adjust script text length, regenerate TTS |
 | Video too short for audio | Tool will SLOW DOWN video (no frame freeze) |
 | Video too long for audio | Tool will SPEED UP video (no cutting) |
 | Browser not maximized | Use browser_resize(1920, 1080) or F11 |
 | Cursor not visible | Ensure screen_index=1 in start_recording |
+| **Wrong window recorded** | Use `capture_mode="window"` with correct `window_title` pattern |
+| **Window not found** | Run `list_windows()` to see exact window titles, adjust pattern |
+| **Linux window tools missing** | Run `sudo apt install wmctrl xdotool` (or dnf/pacman equivalent) |
+| **Window capture failed** | Fall back to `focus_window()` + `capture_mode="screen"` |
 | **Scroll not working** | Use `scrollIntoView()` instead of `scrollBy()`, or use PageDown key |
 | **Page at wrong position** | Take screenshot to verify BEFORE recording, scroll again if needed |
 | **Content not visible after scroll** | Wait 2+ seconds for smooth scroll animation to complete |
 | **Jupyter notebook scroll issues** | Use `scrollIntoView()` on heading elements, not `window.scrollBy()` |
+| **Content not filling viewport** | Zoom browser (125-150%), remove CSS max-width constraints, or record at app's optimal resolution (see RULE 9) |
+| **Empty space on sides of page** | Execute `document.body.style.zoom = '125%'` or adjust container max-width |
+| **Fixed-width web app layout** | Use region-based recording to capture only the content area, or match recording resolution to app design |
+
+### 3.4 The #1 Cause of Failed Demos: Skipping Screenshot Verification
+
+If you recorded the wrong content (wrong page, wrong app, dialog box, etc.), you almost
+certainly skipped one of these critical steps:
+
+1. **Did you take a screenshot BEFORE starting the recording?**
+2. **Did you actually READ/EXAMINE the screenshot to verify the content?**
+3. **Did you use focus_window() to ensure the correct app is in front?**
+
+**The fix is simple**: ALWAYS take and examine screenshots before and after each recording.
+This takes 5 seconds and prevents having to re-do 5 minutes of work.
 
 ---
 
