@@ -22,7 +22,13 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
-from .protocol import get_protocol
+from .protocol import (
+    get_protocol,
+    get_planning_guide,
+    get_setup_guide,
+    get_recording_guide,
+    get_assembly_guide,
+)
 from . import window_manager
 
 # Global state for recording
@@ -461,9 +467,47 @@ async def list_tools() -> list[Tool]:
                 "required": ["video_path", "audio_path", "output_path"]
             }
         ),
+        # Phase-based Protocol Tools (recommended)
+        Tool(
+            name="get_demo_planning_guide",
+            description="Phase 1: Learn how to plan and script your demo. Call this FIRST. Returns structure, timing, script writing guidelines, and demo templates. (~200 lines)",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
+        Tool(
+            name="get_recording_setup_guide",
+            description="Phase 2: Pre-recording checklist and setup. Window management, viewport optimization, multi-monitor setup, screen verification. Call after planning. (~250 lines)",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
+        Tool(
+            name="get_recording_actions_guide",
+            description="Phase 3: What to do DURING recording. Interactive actions (scrolling, clicking, typing), pacing, screenshot verification. CRITICAL for engaging demos that aren't boring. (~200 lines)",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
+        Tool(
+            name="get_video_assembly_guide",
+            description="Phase 4: Post-recording assembly. Audio sync, timing verification, concatenation, quality checks, troubleshooting common issues. (~250 lines)",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
+        # Deprecated - kept for backwards compatibility
         Tool(
             name="get_demo_protocol",
-            description="Get the comprehensive demo recording protocol document. READ THIS FIRST before creating any demo. Contains best practices for preparation, recording, error recovery, and final assembly.",
+            description="DEPRECATED: This returns too much info at once. Use phase-based tools instead: get_demo_planning_guide -> get_recording_setup_guide -> get_recording_actions_guide -> get_video_assembly_guide",
             inputSchema={
                 "type": "object",
                 "properties": {},
@@ -568,7 +612,21 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         elif name == "adjust_video_to_audio_length":
             return await _adjust_video_to_audio_length(arguments)
         
+        # Phase-based Protocol Tools
+        elif name == "get_demo_planning_guide":
+            return [TextContent(type="text", text=get_planning_guide())]
+        
+        elif name == "get_recording_setup_guide":
+            return [TextContent(type="text", text=get_setup_guide())]
+        
+        elif name == "get_recording_actions_guide":
+            return [TextContent(type="text", text=get_recording_guide())]
+        
+        elif name == "get_video_assembly_guide":
+            return [TextContent(type="text", text=get_assembly_guide())]
+        
         elif name == "get_demo_protocol":
+            # Deprecated - returns notice pointing to new tools
             return [TextContent(type="text", text=get_protocol())]
         
         # Window Management Tools
