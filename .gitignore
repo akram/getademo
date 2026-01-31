@@ -74,6 +74,7 @@ venv.bak/
 # Demo recordings (user data)
 recordings/
 demos/
+demo_recordings/
 *.mp4
 *.mp3
 *.wav
