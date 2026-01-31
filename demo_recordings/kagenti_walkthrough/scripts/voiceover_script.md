@@ -114,3 +114,9 @@
 4. **Observability**: Phoenix, Kiali, MCP Gateway integration
 5. **A2A Protocol**: Agent-to-Agent communication standard
 
+
+
+
+
+
+

@@ -35,6 +35,35 @@ Each demo step MUST have:
 **WRONG**: Recording the entire demo as one video, then adding voiceover
 **RIGHT**: Recording each step separately, syncing each step, then concatenating
 
+### ⚠️ CRITICAL: RECORD FIRST, SCRIPT AFTER (MANDATORY)
+
+**DO NOT generate audio scripts before recording!**
+
+The correct workflow for EACH step is:
+
+```
+1. TAKE PRE-SCREENSHOT → See what content will be recorded
+2. RECORD THE VIDEO → Perform the actions for this step
+3. TAKE POST-SCREENSHOT → See where the recording ended
+4. WRITE THE SCRIPT → Based on what the screenshots show
+5. GENERATE AUDIO → Using text_to_speech for the script
+6. SYNC VIDEO + AUDIO → Using adjust_video_to_audio_length
+```
+
+**WHY THIS ORDER MATTERS:**
+
+| Old Way (Script First) | New Way (Record First) |
+|------------------------|------------------------|
+| Write script guessing what you'll show | Record, then describe what you actually showed |
+| Audio doesn't match visuals | Audio perfectly describes the visuals |
+| Have to re-record if actions differ | Script naturally matches the recording |
+| Disconnect between audio and video | Tight alignment every time |
+
+**The screenshots tell you exactly what to say:**
+- PRE-SCREENSHOT: Shows the starting state the viewer sees
+- POST-SCREENSHOT: Shows the ending state after your actions
+- SCRIPT: Describes the journey from start to end
+
 ### USE ONLY MCP TOOLS
 
 **DO NOT** use manual FFmpeg or terminal commands.
@@ -139,48 +168,63 @@ The result shows [outcome]."
 
 ---
 
-## Quick Start Template
+## Quick Start Template (Record First, Script After)
 
-Use this template to plan each step:
+Use this template for each step - note that the script is written AFTER recording:
 
 ```
 # Demo: [Title]
 
 ## Step 1: [Name]
 
-Narration: "[Narration text - what audio will say]"
+### A. PRE-RECORDING
+  - Navigate to: [starting position]
+  - Screenshot: step_01_pre.png
+  - Verify: [what should be visible at start]
 
-Pre-recording:
-  - Scroll to: [element/heading to find]
-  - Verify shows: [what must be visible]
-  - Screenshot: (take one to confirm)
+### B. RECORD VIDEO
+  - Start recording: step_01_raw.mp4
+  - Actions during recording:
+    1. [0-2s] WAIT - viewer sees initial state
+    2. [2-Xs] [Your actions: scroll, click, type, etc.]
+    3. [Final 2s] WAIT - viewer absorbs result
+  - Stop recording
 
-In-recording actions:
-  1. [0-2s] WAIT - initial view
-  2. [2-5s] SCROLL to [target] - reveal content
-  3. [5-10s] WAIT - viewer reads
-  4. [10-12s] SCROLL to [output] - show results
-  5. [12-15s] WAIT - final pause
+### C. POST-RECORDING
+  - Screenshot: step_01_post.png
+  - Verify: [what should be visible at end]
 
-Expected duration: ~Xs audio
+### D. WRITE SCRIPT (based on screenshots!)
+  - Look at step_01_pre.png: What does viewer see at start?
+  - Look at step_01_post.png: What does viewer see at end?
+  - Write narration describing the journey:
+    "Starting from [pre-screenshot content],
+     we [action performed],
+     and now we can see [post-screenshot content]."
 
-## Step 2: [Name]
+### E. GENERATE AUDIO
+  - text_to_speech(text="[your script]", output="step_01_audio.mp3")
 
-Narration: "[Narration text]"
+### F. SYNC & FINALIZE
+  - adjust_video_to_audio_length(video, audio, output="step_01_final.mp4")
 
-Pre-recording:
-  - Scroll to: [element]
-  - Verify shows: [content]
-  - Screenshot: (take one to confirm)
-
-In-recording actions:
-  1. [0-2s] WAIT
-  2. [2-Xs] [Actions...]
-
-Expected duration: ~Xs
-
-[Continue for all steps...]
+[Repeat A-F for each step, then concatenate all step_XX_final.mp4 files]
 ```
+
+### Example: Writing Script from Screenshots
+
+```
+PRE-SCREENSHOT shows:  Google Maps homepage with search bar
+POST-SCREENSHOT shows: Red Hat Ireland office with directions panel
+
+SCRIPT (written AFTER recording):
+"Let's use Google Maps to find the closest Red Hat office. 
+ I'll search for Red Hat offices in the search bar.
+ Here we can see the Red Hat Ireland office in Dublin's Temple Bar area,
+ with the address and directions panel ready to go."
+```
+
+**The screenshots are your guide - describe what they show!**
 
 ---
 
@@ -232,9 +276,74 @@ SETUP_GUIDE = """
 # Recording Setup Guide (Phase 2 of 4)
 
 **Call this after planning your demo.** This guide covers pre-recording setup,
-window management, viewport optimization, and verification.
+window management, and MANDATORY verification steps.
 
 After setup, call `get_recording_actions_guide` for Phase 3.
+
+---
+
+## ⚠️ CRITICAL: THE #1 CAUSE OF BAD DEMOS
+
+**NOT verifying what is being recorded BEFORE and AFTER each step.**
+
+You MUST:
+1. Take a screenshot BEFORE recording each step
+2. EXAMINE the screenshot to verify the content is correct
+3. Take a screenshot AFTER recording each step  
+4. EXAMINE the screenshot to verify the recording captured the right content
+5. If ANYTHING is wrong, DELETE and RE-RECORD
+
+**NEVER start recording without visual confirmation of what will be captured!**
+
+---
+
+## ⚠️ CRITICAL: FULLSCREEN BROWSER SETUP (MANDATORY)
+
+**The browser MUST be in FULLSCREEN mode for consistent recording.**
+
+### ONE-TIME Setup at Demo Start
+
+```
+1. CHECK YOUR SCREEN SIZE FIRST (CRITICAL!)
+   - Run list_screens() to see your display resolution
+   - Note your main screen dimensions (e.g., 1728x1117)
+   - Choose viewport size SMALLER than your screen:
+     * For 1728-wide screens: use width=1680, height=1050
+     * For 1920-wide screens: use width=1920, height=1080
+
+2. NAVIGATE to the target URL using playwright_navigate()
+   - Use viewport dimensions that FIT your screen
+   - Example: playwright_navigate(url="...", width=1680, height=1050)
+
+3. VERIFY browser is visible: list_windows()
+   - Look for "Chrome for Testing" or the page title
+   - CHECK the window bounds (x + width must be < screen width)
+   - If NOT in list: See "Playwright Visibility" section below
+
+4. GET the exact window title pattern from list_windows()
+   - Example: "Cloud Native Agent Platform – Google Chrome for Testing"
+
+5. VERIFY window fits on screen:
+   - From list_windows() output, check Bounds: x, y, w, h
+   - Ensure: x + w < screen_width (no right cutoff)
+   - Ensure: y + h < screen_height (no bottom cutoff)
+
+6. TAKE SCREENSHOT to verify:
+   - playwright_screenshot() 
+   - Examine: Is the full page visible (not cut off)?
+   - Is the browser chrome (tabs, address bar) hidden or minimal?
+
+7. RECORD the window title pattern - you'll use this for ALL steps
+```
+
+### NEVER DO THIS
+
+| Bad Practice | Why It's Bad | Correct Approach |
+|--------------|--------------|------------------|
+| Different window sizes per step | Inconsistent video, zoom issues | Set window size ONCE at start |
+| Region-based recording | Captures wrong areas, zoom problems | Use `capture_mode="window"` |
+| Not checking window is maximized | Records partial window | Verify with screenshot BEFORE recording |
+| Starting recording without screenshot | Unknown what will be captured | ALWAYS screenshot first |
 
 ---
 
@@ -243,24 +352,172 @@ After setup, call `get_recording_actions_guide` for Phase 3.
 Before starting any demo:
 
 - [ ] **Screen Recording Permission**: Verify macOS System Settings -> Privacy & Security -> Screen Recording has your terminal/Cursor enabled
-- [ ] **Screen Resolution**: Set to 1920x1080 (Full HD) for best compatibility
 - [ ] **Window Tools Check**: Run `check_window_tools()` to verify dependencies are installed
 - [ ] **Identify Target Window**: Run `list_windows()` to find the correct window title pattern
 - [ ] **MULTI-MONITOR CHECK**: Run `list_screens()` to identify your displays
+- [ ] **VIEWPORT SIZE CHECK** (CRITICAL - SEE BELOW)
 - [ ] **Browser Setup**:
+  - Navigate with playwright_navigate(url, width=..., height=...)
+  - Verify browser appears in list_windows()
   - Use a clean browser profile or incognito mode
-  - Hide bookmarks bar (Cmd+Shift+B in Chrome)
-  - Hide extensions toolbar
-  - Set browser to full-screen mode (Cmd+Shift+F or F11)
+  - Browser should be maximized/fullscreen
   - Close unnecessary tabs
-- [ ] **Viewport Content Check**:
-  - Take screenshot and verify content fills the full viewport
-  - If content has empty space on sides, zoom in (125-150%) or adjust CSS
-  - Remove max-width constraints if needed: `document.body.style.maxWidth = 'none'`
-  - For fixed-width apps, consider recording at the app's optimal resolution
+- [ ] **TAKE VERIFICATION SCREENSHOT**:
+  - Take screenshot with playwright_screenshot()
+  - EXAMINE the screenshot - is the full browser window visible?
+  - Is the correct page content showing?
+  - DO NOT PROCEED until screenshot shows correct fullscreen content
 - [ ] **Desktop Cleanup**: Hide desktop icons, close unrelated applications
 - [ ] **Do Not Disturb**: Enable to prevent notification interruptions
 - [ ] **Output Directory**: Create a dedicated folder for the demo recordings
+
+---
+
+## ⚠️ CRITICAL: Viewport Size Must Fit Screen (MANDATORY)
+
+**The #2 cause of bad demos: Browser viewport larger than physical screen = content cut off!**
+
+### The Problem
+
+If you set `playwright_navigate(width=1920, height=1080)` but your screen is only 
+1728x1117 pixels, the browser window will be LARGER than your screen and the right 
+side will be CUT OFF during recording.
+
+### MANDATORY: Check Screen Size BEFORE Setting Viewport
+
+```
+1. RUN list_screens() to see your display resolutions:
+   
+   Example output:
+   - Screen 1 (MAIN): 1728 x 1117   <- Your main display
+   - Screen 2: 1920 x 1080          <- External monitor
+   
+2. CHOOSE viewport dimensions SMALLER than your target screen:
+   
+   | Screen Resolution | Safe Viewport Size |
+   |-------------------|-------------------|
+   | 1728 x 1117       | 1680 x 1050       |
+   | 1920 x 1080       | 1920 x 1080       |
+   | 2560 x 1440       | 1920 x 1080       |
+   | 1440 x 900        | 1400 x 850        |
+   
+3. SET viewport to fit your screen:
+   playwright_navigate(url="...", width=1680, height=1050)
+   
+4. VERIFY window fits by checking list_windows() bounds:
+   - Window x + width should be LESS than screen width
+   - Window y + height should be LESS than screen height
+```
+
+### Example Verification
+
+```python
+# 1. Check screen size
+list_screens()
+# Output: Screen 1 (MAIN): 1728 x 1117
+
+# 2. Navigate with SMALLER viewport
+playwright_navigate(url="...", width=1680, height=1050)
+
+# 3. Verify window fits
+list_windows()
+# Look for: Bounds: x=22, y=38, w=1682, h=1079
+# Verify: 22 + 1682 = 1704 < 1728 ✅ (fits!)
+
+# 4. If window is TOO BIG (x + width > screen width):
+#    Browser will be CUT OFF on the right!
+#    Re-navigate with smaller dimensions.
+```
+
+### Common Mistakes
+
+| Mistake | Result | Fix |
+|---------|--------|-----|
+| Using 1920x1080 on a 1728-wide screen | Right 192px cut off | Use 1680x1050 |
+| Not checking screen resolution first | Unknown cutoff | Always run list_screens() first |
+| Assuming all screens are 1920x1080 | Inconsistent recording | Check YOUR screen size |
+
+### Quick Reference: Safe Viewport Sizes
+
+For most MacBook displays (1728px wide or similar):
+- **Recommended:** `width=1680, height=1050`
+- **Also safe:** `width=1600, height=900`
+
+For Full HD external monitors (1920x1080):
+- **Recommended:** `width=1920, height=1080`
+
+**WHEN IN DOUBT: Use a smaller viewport. A little whitespace is better than cut-off content.**
+
+---
+
+## CRITICAL: Playwright Browser Visibility Issue
+
+**⚠️ MAJOR PITFALL: Playwright browsers may NOT appear in system window lists!**
+
+When using Playwright MCP for browser automation, the Chromium browser it spawns:
+- Often does NOT appear in `list_windows()` output on macOS
+- May be positioned off-screen or on a different display
+- Works correctly internally (screenshots show the right content)
+- BUT is NOT visible for screen recording!
+
+### The Problem
+
+You may see this pattern:
+```
+1. playwright_navigate() -> SUCCESS, page loads
+2. playwright_screenshot() -> Shows correct content  
+3. list_windows() -> Playwright browser NOT listed!
+4. start_recording(screen) -> Records your desktop, NOT Playwright
+5. Result: Recording shows the WRONG content!
+```
+
+### MANDATORY: Verify Playwright Visibility BEFORE Recording
+
+```
+1. After playwright_navigate(), call list_windows()
+2. LOOK FOR the Playwright/Chromium window in the list
+   - Should appear as "Chromium" or with the page title
+3. IF NOT FOUND in window list:
+   - The browser is NOT visible on your screen
+   - Screen recording WILL NOT capture it
+   - DO NOT proceed with recording!
+```
+
+### Solutions When Playwright is NOT Visible
+
+**Option 1: Use the user's existing browser (RECOMMENDED)**
+```
+1. Close Playwright: playwright_close()
+2. Ask user to open the URL in their regular Chrome/Firefox
+3. Focus that window: focus_window(title_pattern="Chrome.*")
+4. Provide click-by-click navigation instructions
+5. Record using: capture_mode="window", window_title="Chrome.*"
+```
+
+**Option 2: Try relaunching Playwright**
+```python
+# Close and relaunch with explicit settings
+playwright_close()
+playwright_navigate(url="...", headless=False, width=1280, height=720)
+# Check list_windows() again
+# If still not visible, use Option 1
+```
+
+**Option 3: Kill all Chromium processes and restart**
+```bash
+pkill -9 -f Chromium
+# Then relaunch Playwright
+```
+
+### Signs That Playwright is NOT Being Recorded
+
+- Recording output shows your desktop or another app
+- Playwright screenshot shows correct content, but recording doesn't
+- Video is "stuck" on one page while Playwright navigated elsewhere
+- User reports "nothing is happening" or "page is stuck"
+
+**IF THIS HAPPENS**: Stop immediately, close Playwright, and switch to recording
+the user's visible browser instead.
 
 ---
 
@@ -284,31 +541,41 @@ This shows:
 - Look at where the browser window is physically located
 - OR use `get_window_bounds()` - x coordinates > main display width = external monitor
 
-### Step 3: Use the correct recording method
+### Step 3: Use WINDOW mode recording (RECOMMENDED)
 
-**RECOMMENDED: Region-based recording (most reliable)**
+**ALWAYS USE WINDOW MODE - It captures the exact window consistently:**
 ```python
-# This captures exactly the window, regardless of which screen it's on
+# Get exact window title from list_windows() output
+# Example: "Cloud Native Agent Platform – Google Chrome for Testing"
+start_recording(
+    capture_mode="window",
+    window_title="Google Chrome for Testing",  # Pattern from list_windows()
+    output_path="...",
+    width=1920,
+    height=1080
+)
+```
+
+**Why WINDOW mode is best:**
+- Captures ONLY the target window, regardless of other apps
+- Consistent frame size across all recording steps
+- Works even if window is partially covered
+- No zoom issues from incorrect region bounds
+
+**AVOID region-based recording** - it often captures wrong areas:
+```python
+# DON'T DO THIS - causes inconsistent capture and zoom issues
 bounds = get_window_bounds(title_pattern="Chrome.*")
-start_recording(
-    capture_mode="region",
-    capture_region={"x": bounds.x, "y": bounds.y, "width": bounds.width, "height": bounds.height},
-    output_path="..."
-)
+start_recording(capture_mode="region", capture_region={...})  # AVOID!
 ```
 
-**ALTERNATIVE: Correct screen_index**
+**FALLBACK: Screen mode with focus**
 ```python
-# If browser is on your external monitor (screen 2):
-start_recording(
-    capture_mode="screen",
-    screen_index=2,  # <-- Use the correct screen number!
-    output_path="..."
-)
+# Only use if window mode doesn't work on your platform
+focus_window(title_pattern="Google Chrome for Testing")
+# Wait for window to come to front
+start_recording(capture_mode="screen", screen_index=1, output_path="...")
 ```
-
-**WRONG**: Recording screen 1 when browser is on screen 2 = recording wrong content!
-**RIGHT**: Either use region-based recording OR correct screen_index
 
 ---
 
@@ -316,110 +583,99 @@ start_recording(
 
 **CRITICAL**: Before recording, ensure you're capturing the right window!
 
-### 1. List available windows
+### Step 1: List available windows
 ```python
 list_windows()
 ```
-This shows all visible windows with their titles - note the exact title pattern.
+This shows all visible windows with their titles. Look for your browser:
+- "Cloud Native Agent Platform – Google Chrome for Testing"
+- Or the page title + browser name
 
-### 2. Choose your recording method
+**Record this pattern - you'll use it for ALL steps!**
 
-**Option A - Window Mode (Recommended)**:
+### Step 2: ALWAYS use Window Mode Recording
+
+**Window Mode (MANDATORY for consistent demos):**
 ```python
-start_recording(capture_mode="window", window_title="Chrome.*", output_path="...")
+start_recording(
+    capture_mode="window",
+    window_title="Google Chrome for Testing",  # Pattern from list_windows
+    output_path="step_N_raw.mp4",
+    width=1920,
+    height=1080
+)
 ```
-This captures ONLY the matching window, regardless of what's on top.
 
-**Option B - Focus + Screen Mode**:
+Why window mode is essential:
+- Captures ONLY the target window, regardless of other apps
+- Consistent frame size across ALL steps
+- No zoom issues from region coordinate problems
+- Works even if window is partially covered
+
+**Fallback: Focus + Screen Mode**
 ```python
-focus_window(title_pattern="Chrome.*")
+# Only use if window mode doesn't work on your platform
+focus_window(title_pattern="Google Chrome for Testing")
 # Wait a moment for window to come to front
-start_recording(capture_mode="screen", output_path="...")
+start_recording(capture_mode="screen", screen_index=1, output_path="...")
 ```
-Use this if window mode has issues on your platform.
 
-### 3. Verify bounds (optional)
+### Step 3: AVOID Region-Based Recording
+
+**DO NOT use region-based recording** - it causes zoom and framing issues:
 ```python
-get_window_bounds(title_pattern="Chrome.*")
+# DON'T DO THIS - causes inconsistent capture
+bounds = get_window_bounds(title_pattern="Chrome.*")
+start_recording(capture_mode="region", capture_region={...})  # AVOID!
 ```
-Returns x, y, width, height - useful for region-based recording.
+
+Region recording problems:
+- Window position changes = captures wrong area
+- Dimension rounding = inconsistent frame sizes
+- Multi-monitor issues = captures wrong screen area
 
 ---
 
-## Viewport Content Optimization
+## Ensuring Consistent Window Recording
 
-**The web page content MUST fill the entire browser viewport for professional demos.**
+**DO NOT zoom or manipulate the page content.** Just ensure the browser window is properly set up.
 
-Many web applications have responsive layouts that may leave empty space.
-
-### Pre-Recording Browser Optimization
+### The Simple Rule: Fullscreen Browser + Window Mode Recording
 
 ```
-1. RESIZE browser viewport to recording resolution (e.g., 1920x1080)
-   - Use browser_resize(1920, 1080) or playwright_resize
-   
-2. TAKE SCREENSHOT and examine it:
-   - Does the content fill the full width?
-   - Is there excessive whitespace on the sides?
-   - Is the navigation/sidebar properly sized?
+1. SET browser to 1920x1080 at start:
+   playwright_navigate(url="...", width=1920, height=1080)
 
-3. IF content doesn't fill viewport, try these fixes:
-   a. ZOOM IN using browser zoom (Cmd/Ctrl + Plus):
-      - Execute: document.body.style.zoom = '125%' or '150%'
-      - Or press Cmd/Ctrl + Plus multiple times
-   
-   b. USE CSS to expand content width:
-      - Execute: document.querySelector('main').style.maxWidth = '100%'
-      - Or: document.body.style.maxWidth = 'none'
-   
-   c. HIDE unnecessary sidebars/panels if possible:
-      - Click collapse buttons
-      - Or: document.querySelector('.sidebar').style.display = 'none'
-   
-   d. ADJUST viewport to match content:
-      - If app is designed for 1280px, record at 1280x720 instead
+2. VERIFY browser is in list_windows()
 
-4. TAKE SCREENSHOT again to verify the fix worked
+3. TAKE screenshot and EXAMINE it:
+   - Is the full browser window visible?
+   - Is the page content showing correctly?
+   - Is the window maximized/fullscreen?
 
-5. ONLY proceed to recording when content fills the viewport properly
+4. RECORD using window mode:
+   start_recording(capture_mode="window", window_title="...", width=1920, height=1080)
+
+5. SAME window setup for ALL steps - don't change it!
 ```
 
-### Common Viewport Issues and Fixes
+### What NOT to Do
 
-| Issue | Solution |
-|-------|----------|
-| Content has max-width constraint | Execute JS: `document.querySelector('.container').style.maxWidth = 'none'` |
-| Large empty margins on sides | Zoom browser to 125% or 150% |
-| Sidebar takes too much space | Collapse or hide the sidebar before recording |
-| App designed for smaller screens | Record at the app's optimal resolution instead of 1920x1080 |
-| Fixed-width layout | Use region-based recording to capture only the content area |
-| Login/Auth pages with centered box | Zoom in or record at smaller resolution to fill frame |
+| Bad Practice | Why It's Bad |
+|--------------|--------------|
+| Zooming page content (125%, 150%) | Creates inconsistent video frames |
+| Different window sizes per step | Video will have varying zoom levels |
+| Region-based recording | Captures wrong areas, zoom issues |
+| Not verifying with screenshot | Unknown what's being recorded |
+| Manipulating CSS/styles | Unexpected layout changes |
 
-### JavaScript Snippets for Common Fixes
+### If Content Doesn't Fill the Window
 
-**Remove max-width constraints:**
-```javascript
-document.querySelectorAll('*').forEach(el => {
-  if (getComputedStyle(el).maxWidth !== 'none') {
-    el.style.maxWidth = 'none';
-  }
-});
-```
+**ACCEPT IT** - A page with whitespace is better than inconsistent zoom levels.
 
-**Zoom the page content:**
-```javascript
-document.body.style.zoom = '125%';  // or '150%' for more zoom
-```
-
-**Expand main content area:**
-```javascript
-const main = document.querySelector('main, .main, #main, .content, #content');
-if (main) {
-  main.style.maxWidth = '100%';
-  main.style.width = '100%';
-  main.style.padding = '0 2rem';
-}
-```
+Only adjust if absolutely necessary:
+- Use the app's designed resolution (e.g., 1280x720 for smaller apps)
+- Set this ONCE at the start and keep it consistent for ALL steps
 
 ---
 
@@ -450,11 +706,11 @@ if (main) {
 
 ### Recording Capture Modes
 
-| Mode | Description | Use When |
-|------|-------------|----------|
-| `screen` | Capture entire screen (default) | Recording full desktop, or after using `focus_window` |
-| `window` | Capture specific window by title | Recording browser, simulator, or any specific app |
-| `region` | Capture a specific screen area | Recording part of screen, use with `get_window_bounds` |
+| Mode | Description | Recommendation |
+|------|-------------|----------------|
+| `window` | Capture specific window by title | ✅ **ALWAYS USE THIS** - Consistent framing, no zoom issues |
+| `screen` | Capture entire screen | ⚠️ Fallback only - Use with `focus_window()` first |
+| `region` | Capture a specific screen area | ❌ **AVOID** - Causes zoom/framing inconsistencies |
 
 ### Browser Tools (from Playwright or browser MCP)
 
@@ -469,21 +725,55 @@ if (main) {
 
 ---
 
-## Verification Workflow
+## ⚠️ MANDATORY Verification Workflow
 
-**ALWAYS verify before recording:**
+**EVERY step requires screenshot verification BEFORE and AFTER recording.**
+
+### Before Recording Each Step:
 
 ```
-1. Navigate to target URL
-2. Resize browser to 1920x1080
-3. Apply zoom/CSS fixes if needed
-4. Scroll to target element
-5. Wait 2 seconds for animation
-6. TAKE SCREENSHOT
-7. EXAMINE screenshot - is correct content visible and centered?
-8. (IF wrong) -> repeat scroll and verify
-9. (IF correct) -> proceed to recording
+1. Navigate/scroll to starting position
+2. TAKE SCREENSHOT (playwright_screenshot)
+3. READ THE SCREENSHOT FILE (use read_file on the PNG)
+4. VERIFY:
+   ✓ Full browser window visible (not partial)?
+   ✓ Correct page/content showing?
+   ✓ Window is maximized/fullscreen?
+   ✓ No dialogs or overlays blocking content?
+5. IF ANY CHECK FAILS:
+   - Fix the issue
+   - Re-take screenshot
+   - Re-verify
+6. ONLY start recording when ALL checks pass
 ```
+
+### After Recording Each Step:
+
+```
+1. TAKE SCREENSHOT immediately after stop_recording()
+2. READ THE SCREENSHOT FILE
+3. VERIFY:
+   ✓ Recording ended on expected content?
+   ✓ Window still fullscreen (didn't resize)?
+   ✓ Correct final state for this step?
+4. IF ANY CHECK FAILS:
+   - DELETE the raw recording
+   - Go back and re-record the step
+5. ONLY proceed to audio sync when verification passes
+```
+
+### Summary: Screenshot Verification Checklist
+
+For EACH step:
+- [ ] Pre-recording screenshot taken
+- [ ] Pre-recording screenshot EXAMINED (not just taken!)
+- [ ] Pre-recording verification passed
+- [ ] Recording completed
+- [ ] Post-recording screenshot taken
+- [ ] Post-recording screenshot EXAMINED
+- [ ] Post-recording verification passed
+
+**NEVER skip screenshot verification. It's the difference between good and terrible demos.**
 
 ---
 
@@ -658,6 +948,8 @@ These mistakes create boring, unprofessional demos:
 | **Jerky cursor movements** | Unprofessional | Move cursor smoothly and deliberately |
 | **No pauses** | Overwhelming | Pause after EVERY action |
 | **Headless browser recording** | Can't record invisible browser | Use a VISIBLE browser window |
+| **Recording without checking list_windows()** | Playwright may be invisible | ALWAYS verify browser appears in window list BEFORE recording |
+| **Assuming Playwright is visible** | Playwright often runs off-screen | Check list_windows(); if not found, use user's existing browser |
 
 ---
 
@@ -686,41 +978,147 @@ These mistakes create boring, unprofessional demos:
 
 ---
 
-## Per-Step Recording Workflow
+## Per-Step Recording Workflow (MANDATORY - DO NOT SKIP)
 
-For EACH step in your demo, follow this EXACT sequence:
+⚠️ **THIS IS THE MOST IMPORTANT SECTION** ⚠️
+
+The #1 cause of bad demos is skipping screenshot verification. Follow this EXACT sequence for EACH step:
 
 ```
-PRE-RECORDING VERIFICATION (MANDATORY):
-1. IDENTIFY target window: list_windows() to get correct title pattern
-2. SCROLL/NAVIGATE to starting position
-3. *** TAKE SCREENSHOT ***
-4. *** READ THE SCREENSHOT - actually examine the image ***
-5. *** VERIFY: Is this the CORRECT content for this step? ***
-   - If NO: Navigate/scroll to correct content, GOTO step 3
-   - If YES: proceed to recording
-6. Focus the target window: focus_window(title_pattern="...")
+═══════════════════════════════════════════════════════════════════════
+STEP A: PRE-RECORDING VERIFICATION (DO NOT SKIP!)
+═══════════════════════════════════════════════════════════════════════
 
-RECORDING PHASE:
-7. START recording using start_recording tool
-   - PREFERRED: capture_mode="window", window_title="YourApp.*"
-   - FALLBACK: focus_window() first, then capture_mode="screen"
+1. NAVIGATE/SCROLL to starting position for this step
+
+2. ★★★ TAKE SCREENSHOT ★★★
+   - Call playwright_screenshot(name="step_N_pre_verify")
+   - This screenshot shows what the recording WILL capture
+
+3. ★★★ EXAMINE THE SCREENSHOT ★★★
+   - Actually READ the image file (use read_file on the PNG)
+   - Ask yourself: Is this EXACTLY what should be recorded?
+   - Is the FULL browser window visible?
+   - Is the correct PAGE CONTENT showing?
+   - Is the window MAXIMIZED (no partial window)?
+
+4. ★★★ IF ANYTHING IS WRONG - FIX IT ★★★
+   - Wrong content? → Navigate/scroll and re-screenshot
+   - Partial window? → Maximize browser and re-screenshot
+   - Wrong page? → Navigate to correct page and re-screenshot
+   - REPEAT until screenshot shows EXACTLY what you want to record
+
+5. ONLY proceed when screenshot verification PASSES
+
+═══════════════════════════════════════════════════════════════════════
+STEP B: RECORDING PHASE
+═══════════════════════════════════════════════════════════════════════
+
+6. Focus the target window:
+   focus_window(title_pattern="Google Chrome for Testing")
+
+7. START recording with WINDOW mode:
+   start_recording(
+       capture_mode="window",
+       window_title="Google Chrome for Testing",  # From list_windows()
+       output_path="step_N_raw.mp4",
+       width=1920,
+       height=1080
+   )
+
 8. WAIT 2-3 seconds (viewer sees initial state)
-9. EXECUTE IN-RECORDING ACTIONS matching the narration:
+
+9. EXECUTE IN-RECORDING ACTIONS:
    - SCROLL to reveal content as audio describes it
    - CLICK buttons/links as needed
    - TYPE in input fields slowly
    - WAIT after each action (2 seconds minimum)
    - PAUSE on key information (3-5 seconds)
-10. WAIT 2-3 seconds at end (viewer absorbs final state)
-11. STOP recording using stop_recording tool
 
-POST-RECORDING VERIFICATION (MANDATORY):
-12. *** TAKE SCREENSHOT ***
-13. *** VERIFY: Did the recording end on the expected content? ***
-    - If NO: DELETE the raw recording, GOTO step 2
-    - If YES: proceed to audio sync
+10. WAIT 2-3 seconds at end (viewer absorbs final state)
+
+11. STOP recording:
+    stop_recording()
+
+═══════════════════════════════════════════════════════════════════════
+STEP C: POST-RECORDING VERIFICATION (DO NOT SKIP!)
+═══════════════════════════════════════════════════════════════════════
+
+12. ★★★ TAKE SCREENSHOT ★★★
+    - Call playwright_screenshot(name="step_N_post_verify")
+
+13. ★★★ EXAMINE THE SCREENSHOT ★★★
+    - Is this the expected END state for this step?
+    - Did the navigation/scrolling work correctly?
+    - Is the window still fullscreen (not resized)?
+
+14. ★★★ IF VERIFICATION FAILS ★★★
+    - DELETE the raw recording file
+    - Go back to STEP A and re-record
+    - DO NOT proceed with a bad recording!
+
+15. ONLY proceed to SCRIPT WRITING when post-recording verification PASSES
+
+═══════════════════════════════════════════════════════════════════════
+STEP D: WRITE SCRIPT BASED ON SCREENSHOTS (CRITICAL!)
+═══════════════════════════════════════════════════════════════════════
+
+16. ★★★ COMPARE PRE AND POST SCREENSHOTS ★★★
+    - PRE-SCREENSHOT (step_N_pre_verify.png): Starting state
+    - POST-SCREENSHOT (step_N_post_verify.png): Ending state
+    - IDENTIFY: What changed? What did the viewer see happen?
+
+17. ★★★ WRITE NARRATION THAT DESCRIBES THE VISUAL JOURNEY ★★★
+    Example format:
+    "Starting from [describe pre-screenshot],
+     we [describe the action you performed],
+     and now we can see [describe post-screenshot]."
+    
+    The script should ONLY describe what is actually visible!
+
+18. ★★★ GENERATE AUDIO FROM YOUR SCRIPT ★★★
+    text_to_speech(
+        text="[Your script based on screenshots]",
+        output_path="step_N_audio.mp3",
+        voice="onyx"
+    )
+
+═══════════════════════════════════════════════════════════════════════
+STEP E: SYNC VIDEO WITH AUDIO
+═══════════════════════════════════════════════════════════════════════
+
+19. SYNC the video to match audio duration:
+    adjust_video_to_audio_length(
+        video_path="step_N_raw.mp4",
+        audio_path="step_N_audio.mp3",
+        output_path="step_N_final.mp4",
+        add_audio=True
+    )
+
+20. VERIFY the final video has correct duration and audio
 ```
+
+### WHY RECORD FIRST, SCRIPT AFTER?
+
+| Problem with Script-First | Solution with Record-First |
+|---------------------------|---------------------------|
+| Audio says "click the blue button" but button is red | Script describes what you actually see |
+| Audio mentions feature not visible on screen | Script only mentions visible content |
+| Timing mismatch between audio and visuals | Audio naturally matches recording length |
+| Re-record if actions don't match script | Script adapts to whatever you recorded |
+
+**The screenshots tell you EXACTLY what to say. Use them!**
+
+### WHY THIS MATTERS
+
+Without screenshot verification:
+- You won't know if the browser was visible
+- You won't know if the window was fullscreen
+- You won't know if the correct content was showing
+- You'll waste time recording bad content
+- You'll get inconsistent zoom/framing across steps
+
+**5 seconds of verification prevents 5 minutes of re-work.**
 
 ---
 
@@ -773,8 +1171,92 @@ After recording all steps:
 ASSEMBLY_GUIDE = """
 # Video Assembly Guide (Phase 4 of 4)
 
-**Call this after recording all steps.** This guide covers audio synchronization,
-video concatenation, quality checks, and troubleshooting.
+**Call this after recording each step.** This guide covers the complete per-step
+workflow: script writing from screenshots, audio generation, synchronization,
+and final concatenation.
+
+---
+
+## ⚠️ CRITICAL: Complete Per-Step Workflow
+
+### For EACH step, follow this EXACT sequence:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ STEP N WORKFLOW (Repeat for each step)                              │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. RECORD VIDEO                                                    │
+│     ├── Take PRE-screenshot (see starting state)                   │
+│     ├── Record step_N_raw.mp4                                      │
+│     └── Take POST-screenshot (see ending state)                    │
+│                                                                     │
+│  2. WRITE SCRIPT (based on screenshots!)                           │
+│     ├── Compare PRE and POST screenshots                           │
+│     ├── Describe what viewer sees at start                         │
+│     ├── Describe the action/transition                             │
+│     └── Describe what viewer sees at end                           │
+│                                                                     │
+│  3. GENERATE AUDIO                                                  │
+│     └── text_to_speech(script) → step_N_audio.mp3                  │
+│                                                                     │
+│  4. SYNC VIDEO + AUDIO                                              │
+│     └── adjust_video_to_audio_length() → step_N_final.mp4          │
+│                                                                     │
+│  5. PROCEED TO NEXT STEP                                            │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**DO NOT batch all recordings first, then all scripts, then all audio!**
+**Complete each step fully before moving to the next.**
+
+---
+
+## Writing Scripts from Screenshots
+
+### The Screenshot-to-Script Process
+
+```python
+# After recording step N, you have:
+# - step_N_pre_verify.png  (starting state)
+# - step_N_raw.mp4         (the recording)
+# - step_N_post_verify.png (ending state)
+
+# READ both screenshots and write script that describes:
+# 1. What the viewer sees at the START
+# 2. What ACTION happens during the recording
+# 3. What the viewer sees at the END
+
+script = '''
+Here we can see [describe pre-screenshot content].
+Now I'll [describe the action you performed].
+As you can see, [describe post-screenshot content].
+'''
+
+# Generate audio from the script
+text_to_speech(text=script, output_path="step_N_audio.mp3", voice="onyx")
+```
+
+### Example: Writing from Screenshots
+
+```
+PRE-SCREENSHOT shows:
+  - OpenShift Overview page
+  - Cluster status: healthy
+  - Left sidebar visible
+
+POST-SCREENSHOT shows:
+  - Projects list page
+  - Multiple projects visible (kagent, agentic-workflows, etc.)
+  - Resource usage columns
+
+SCRIPT (written from screenshots):
+"From the OpenShift Overview, let's navigate to the Projects section.
+ Here we can see all the namespaces in our cluster, including
+ AI workloads like kagent and agentic-workflows. Each project
+ shows its memory and CPU usage at a glance."
+```
 
 ---
 
@@ -791,10 +1273,10 @@ Use `adjust_video_to_audio_length` which automatically speeds up or slows down.
 
 ### Per-Step Sync Workflow
 
-For each recorded step:
+For each recorded step (after writing script and generating audio):
 
 ```python
-# 1. Get the audio duration
+# 1. Get the audio duration (from the script you just wrote)
 audio_duration = get_audio_duration(audio_path="step_01_audio.mp3")
 
 # 2. Adjust video to match audio length
@@ -912,12 +1394,17 @@ demo_recordings/
 
 | Issue | Solution |
 |-------|----------|
+| **INCONSISTENT ZOOM/FRAMING** | Browser window wasn't fullscreen for all steps. Set window size ONCE at start, use window-mode recording |
+| **PARTIAL WINDOW RECORDED** | Browser wasn't maximized. Take screenshot BEFORE recording to verify fullscreen |
+| **DIFFERENT ZOOM LEVELS PER STEP** | Used region-based recording with different bounds. Use `capture_mode="window"` instead |
 | **RECORDED WRONG CONTENT** | YOU SKIPPED SCREENSHOT VERIFICATION! Delete recording, take screenshot, verify content, re-record |
 | **Recorded a different page/app** | Use `focus_window()` before recording, take screenshot to verify the correct window is focused |
 | **Cookie/consent dialog showing** | Handle dialogs BEFORE taking pre-recording screenshot - click accept/dismiss first |
 | Recording permission denied | System Settings -> Privacy -> Screen Recording, restart Cursor |
 | **Wrong window recorded** | Use `capture_mode="window"` with correct `window_title` pattern |
 | **Window not found** | Run `list_windows()` to see exact window titles, adjust pattern |
+| **Playwright browser invisible** | Playwright browser not in `list_windows()` = recording will fail! Close Playwright, kill Chromium processes, use user's existing browser |
+| **Recording shows desktop/wrong app** | Playwright was running invisibly. Switch to user's visible browser window instead |
 
 ### Sync Issues
 
@@ -943,9 +1430,10 @@ demo_recordings/
 
 | Issue | Solution |
 |-------|----------|
-| **Content not filling viewport** | Zoom browser (125-150%), remove CSS max-width constraints |
-| **Empty space on sides of page** | Execute `document.body.style.zoom = '125%'` or adjust container max-width |
-| **Fixed-width web app layout** | Use region-based recording to capture only the content area, or match recording resolution to app design |
+| **Inconsistent zoom across steps** | Set browser size ONCE at start, use window-mode recording for ALL steps |
+| **Partial window recorded** | Browser wasn't fullscreen. Take screenshot to verify BEFORE recording |
+| **Content not filling viewport** | Accept whitespace - it's better than inconsistent zoom. Or use smaller resolution for all steps |
+| **Different frame sizes per step** | You used region-based recording. Switch to `capture_mode="window"` |
 
 ### Platform-Specific Issues
 
@@ -980,17 +1468,32 @@ If re-recording step N changes timing or flow:
 
 ## The #1 Cause of Failed Demos
 
-**Skipping Screenshot Verification**
+**Skipping Screenshot Verification and Inconsistent Window Setup**
 
-If you recorded the wrong content (wrong page, wrong app, dialog box, etc.), you almost
-certainly skipped one of these critical steps:
+If your demo has inconsistent zoom, partial windows, or wrong content, you almost
+certainly made one of these mistakes:
 
+### Mistake 1: No Screenshot Verification
 1. **Did you take a screenshot BEFORE starting the recording?**
 2. **Did you actually READ/EXAMINE the screenshot to verify the content?**
-3. **Did you use focus_window() to ensure the correct app is in front?**
+3. **Did you take a screenshot AFTER the recording?**
 
-**The fix is simple**: ALWAYS take and examine screenshots before and after each recording.
-This takes 5 seconds and prevents having to re-do 5 minutes of work.
+### Mistake 2: Inconsistent Window Setup
+1. **Did you set the browser to fullscreen ONCE at the start?**
+2. **Did you use `capture_mode="window"` (not region)?**
+3. **Did you use the SAME window_title pattern for all steps?**
+
+### Mistake 3: Using Region-Based Recording
+- Region recording (`capture_region=...`) captures EXACT pixel coordinates
+- If the window moves or resizes, you capture the WRONG content
+- This causes zoom issues and inconsistent framing
+- **ALWAYS use `capture_mode="window"` instead**
+
+**The fix is simple**: 
+1. Set browser to fullscreen ONCE at demo start
+2. Use window-mode recording for ALL steps
+3. Take and examine screenshots BEFORE and AFTER each step
+This takes 10 seconds and prevents a terrible demo.
 
 ---
 
