@@ -404,7 +404,7 @@ print_summary() {
     echo "  - concatenate_videos"
     echo "  - get_demo_protocol"
     echo ""
-    echo "Documentation: https://github.com/Schimuneck/getademo"
+    echo "Documentation: https://github.com/Schimuneck/demo-recorder-mcp"
     echo ""
 }
 

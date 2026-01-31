@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Supports Python 3.10+
 - MIT licensed
 
-[Unreleased]: https://github.com/Schimuneck/getademo/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Schimuneck/getademo/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Schimuneck/demo-recorder-mcp/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Schimuneck/demo-recorder-mcp/releases/tag/v0.1.0
 
 

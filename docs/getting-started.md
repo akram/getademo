@@ -41,8 +41,8 @@ ffmpeg -version
 The easiest way to get started:
 
 ```bash
-git clone https://github.com/Schimuneck/getademo.git
-cd getademo
+git clone https://github.com/Schimuneck/demo-recorder-mcp.git
+cd demo-recorder-mcp
 ./install.sh
 ```
 
@@ -73,8 +73,8 @@ pip install "getademo[all]"
 ### Option 3: Install from Source (Manual)
 
 ```bash
-git clone https://github.com/Schimuneck/getademo.git
-cd getademo
+git clone https://github.com/Schimuneck/demo-recorder-mcp.git
+cd demo-recorder-mcp
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[all]"

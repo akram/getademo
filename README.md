@@ -76,8 +76,8 @@ choco install ffmpeg
 The easiest way to install is using the automated installer:
 
 ```bash
-git clone https://github.com/Schimuneck/getademo.git
-cd getademo
+git clone https://github.com/Schimuneck/demo-recorder-mcp.git
+cd demo-recorder-mcp
 ./install.sh
 ```
 
@@ -108,8 +108,8 @@ pip install "getademo[all]"
 #### From Source
 
 ```bash
-git clone https://github.com/Schimuneck/getademo.git
-cd getademo
+git clone https://github.com/Schimuneck/demo-recorder-mcp.git
+cd demo-recorder-mcp
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[all]"
@@ -326,6 +326,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Links
 
-- [GitHub Repository](https://github.com/Schimuneck/getademo)
-- [Issue Tracker](https://github.com/Schimuneck/getademo/issues)
+- [GitHub Repository](https://github.com/Schimuneck/demo-recorder-mcp)
+- [Issue Tracker](https://github.com/Schimuneck/demo-recorder-mcp/issues)
 - [Changelog](CHANGELOG.md)

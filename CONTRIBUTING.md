@@ -63,8 +63,8 @@ We welcome feature requests! Please:
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/getademo.git
-cd getademo
+git clone https://github.com/YOUR_USERNAME/demo-recorder-mcp.git
+cd demo-recorder-mcp
 
 # Create virtual environment
 python -m venv .venv

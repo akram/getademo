@@ -60,11 +60,11 @@ dev = [
 getademo = "getademo.server:run"
 
 [project.urls]
-Homepage = "https://github.com/Schimuneck/getademo"
-Documentation = "https://github.com/Schimuneck/getademo#readme"
-Repository = "https://github.com/Schimuneck/getademo"
-Issues = "https://github.com/Schimuneck/getademo/issues"
-Changelog = "https://github.com/Schimuneck/getademo/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/Schimuneck/demo-recorder-mcp"
+Documentation = "https://github.com/Schimuneck/demo-recorder-mcp#readme"
+Repository = "https://github.com/Schimuneck/demo-recorder-mcp"
+Issues = "https://github.com/Schimuneck/demo-recorder-mcp/issues"
+Changelog = "https://github.com/Schimuneck/demo-recorder-mcp/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/getademo"]
