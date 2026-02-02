@@ -1,331 +1,344 @@
-# getademo
+# Demo Recorder MCP
 
 An MCP (Model Context Protocol) server that enables AI agents to create professional demo videos with synchronized voiceover narration. Works with **any website or web application**.
 
 ## Features
 
-- **Screen Recording** - Start/stop screen capture with configurable resolution (macOS, Linux, Windows)
-- **Text-to-Speech** - Generate voiceover audio using OpenAI TTS or Edge TTS (free)
-- **Video Editing** - Trim, concatenate, merge audio tracks
-- **Audio-Video Sync** - Automatically adjust video speed to match narration (never cuts content)
-- **Demo Protocol** - Built-in best practices guide for creating professional demos
+- **Screen Recording** - Auto-detects browser window in container, captures at 30fps
+- **Text-to-Speech** - Generate voiceover using OpenAI TTS (with API key) or Edge TTS (free)
+- **Audio-Video Sync** - Adjust video speed to match narration length (preserves all content)
+- **Scene-Based Workflow** - Built-in guides enforce short, manageable recordings
+- **Container-First** - Includes Playwright browser + virtual display for headless operation
+
+## Quick Start (Container)
+
+```bash
+# Build the container
+git clone https://github.com/Schimuneck/demo-recorder-mcp.git
+cd demo-recorder-mcp
+podman build -t demo-recorder-mcp .
+
+# Or use docker
+docker build -t demo-recorder-mcp .
+```
+
+Add to Cursor MCP settings (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "demo-recorder": {
+      "command": "podman",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "/path/to/recordings:/app/recordings",
+        "-e", "OPENAI_API_KEY=sk-your-api-key-here",
+        "demo-recorder-mcp"
+      ]
+    }
+  }
+}
+```
 
 ## How It Works
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     YOUR DEMO REQUEST                       │
-│              "Create a demo of Google Search"               │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│           cursor-browser-extension MCP                      │
-│   (Browser Control: navigate, click, type, screenshot)      │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    getademo MCP                             │
-│   (Recording, TTS, Video Editing, Audio-Video Sync)         │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    FINAL DEMO VIDEO                         │
-│     Professional demo with synced voiceover narration       │
+│                   Container (Recommended)                    │
+│  ┌───────────────┐  ┌───────────────┐  ┌─────────────────┐  │
+│  │    Xvfb       │  │   Playwright  │  │  Demo Recorder  │  │
+│  │  DISPLAY=:99  │◄─│    Browser    │  │      MCP        │  │
+│  │  2560x1440    │  │   (Firefox)   │  │    (FFmpeg)     │  │
+│  └───────────────┘  └───────────────┘  └─────────────────┘  │
+│         │                                      │             │
+│         └──────────► Screen Capture ◄──────────┘             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## What Can You Demo?
-
-| Demo Type | Examples |
-|-----------|----------|
-| Search Engines | Google, Bing, DuckDuckGo |
-| Web Applications | Gmail, GitHub, Jira, Notion, any SaaS |
-| Documentation | README walkthroughs, API docs |
-| Data Science | Jupyter notebooks, Google Colab |
-| E-commerce | Product browsing, checkout flows |
-| Dashboards | Analytics, monitoring tools |
-| **Any Website** | If it's in a browser, you can demo it |
-
-## Requirements
-
-- **Python 3.10+**
-- **ffmpeg** - For screen recording and video processing
-- **OpenAI API key** (optional) - For high-quality TTS voices
-- **Cursor IDE** - For MCP integration with AI agents
-
-### Install ffmpeg
-
-```bash
-# macOS
-brew install ffmpeg
-
-# Ubuntu/Debian
-sudo apt install ffmpeg
-
-# Windows (with Chocolatey)
-choco install ffmpeg
-```
-
-## Installation
-
-### Quick Install (Recommended)
-
-The easiest way to install is using the automated installer:
-
-```bash
-git clone https://github.com/Schimuneck/demo-recorder-mcp.git
-cd demo-recorder-mcp
-./install.sh
-```
-
-The installer will:
-- Check and install dependencies (ffmpeg, Python 3.10+)
-- Create a virtual environment
-- Install the package with all TTS engines
-- Configure Cursor MCP automatically
-- Guide you through screen recording permissions (macOS)
-
-### Manual Installation
-
-#### From PyPI
-
-```bash
-pip install getademo
-
-# With OpenAI TTS support
-pip install "getademo[openai]"
-
-# With Edge TTS support (free, no API key needed)
-pip install "getademo[edge]"
-
-# With both TTS engines
-pip install "getademo[all]"
-```
-
-#### From Source
-
-```bash
-git clone https://github.com/Schimuneck/demo-recorder-mcp.git
-cd demo-recorder-mcp
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e ".[all]"
-```
-
-## Configure in Cursor
-
-Add to your Cursor MCP settings (`~/.cursor/mcp.json`):
-
-### Option 1: Using installed package
-
-```json
-{
-  "mcpServers": {
-    "getademo": {
-      "command": "getademo",
-      "env": {
-        "OPENAI_API_KEY": "sk-your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-### Option 2: Using Python module
-
-```json
-{
-  "mcpServers": {
-    "getademo": {
-      "command": "python",
-      "args": ["-m", "getademo.server"],
-      "env": {
-        "OPENAI_API_KEY": "sk-your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-### Option 3: From source directory
-
-```json
-{
-  "mcpServers": {
-    "getademo": {
-      "command": "python",
-      "args": ["-m", "getademo.server"],
-      "cwd": "/path/to/getademo",
-      "env": {
-        "PYTHONPATH": "/path/to/getademo/src",
-        "OPENAI_API_KEY": "sk-your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-## Quick Start
-
-### 1. Read the Protocol First
-
-Before creating any demo, the AI agent should read the built-in protocol:
-
-```
-get_demo_protocol → Returns mandatory rules and workflow
-```
-
-### 2. Basic Demo Workflow
-
-For each step in your demo:
-
-```
-1. text_to_speech("Your narration here", "step_01_audio.mp3")
-2. start_recording("step_01_raw.mp4")
-3. [Perform actions in browser]
-4. stop_recording()
-5. adjust_video_to_audio_length("step_01_raw.mp4", "step_01_audio.mp3", "step_01_final.mp4")
-```
-
-### 3. Final Assembly
-
-```
-concatenate_videos(["step_01_final.mp4", "step_02_final.mp4", ...], "final_demo.mp4")
-```
+The container:
+1. Starts **Xvfb** with a virtual display
+2. Runs **Playwright MCP** (browser renders to virtual display)
+3. Runs **Demo Recorder MCP** (FFmpeg captures from virtual display)
+4. Both MCPs multiplex through a single connection
 
 ## Available Tools
 
+### Recording Tools
+
 | Tool | Description |
 |------|-------------|
-| `start_recording` | Start screen recording (1920x1080 default) |
-| `stop_recording` | Stop recording and save file |
+| `start_recording` | Start video recording (auto-detects browser window) |
+| `stop_recording` | Stop recording and save the video file |
 | `recording_status` | Check if recording is in progress |
-| `text_to_speech` | Generate voiceover audio (OpenAI or Edge TTS) |
-| `adjust_video_to_audio_length` | **Key tool**: Speed up/slow down video to match audio |
-| `concatenate_videos` | Join multiple videos into one |
-| `replace_video_audio` | Replace audio track in video |
-| `merge_audio_tracks` | Layer multiple audio files on video |
-| `trim_video` | Cut video to time range |
-| `get_media_info` | Get video/audio metadata |
-| `get_audio_duration` | Get exact audio duration |
-| `get_demo_protocol` | Retrieve best practices document |
+
+### Audio Tools
+
+| Tool | Description |
+|------|-------------|
+| `text_to_speech` | Generate voiceover audio (uses OpenAI if API key set, else Edge TTS) |
+
+### Video Editing Tools
+
+| Tool | Description |
+|------|-------------|
+| `adjust_video_to_audio` | Sync video duration to audio by adjusting playback speed |
+| `concatenate_videos` | Join multiple scene videos into final demo |
+| `media_info` | Get duration, resolution, and codec info for any media file |
+
+### Protocol Guides
+
+| Tool | Description |
+|------|-------------|
+| `planning_phase_1` | Demo planning guide - call FIRST before any demo |
+| `setup_phase_2` | Browser setup guide - sizing and window verification |
+| `recording_phase_3` | Recording actions guide - pacing and interaction patterns |
+| `editing_phase_4` | Post-recording guide - audio sync and final assembly |
+
+### Utility Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_windows` | List visible windows (call after browser_navigate) |
+| `window_tools` | Check availability of window management tools |
+
+## Scene-Based Workflow
+
+Demos are recorded as **short scenes (10-30 seconds each)**, not one long video. This enables precise audio-video synchronization.
+
+### Per-Scene Process
+
+```
+SCENE N:
+1. browser_snapshot()                    # Verify starting position
+2. start_recording()                     # START recording
+3. browser_wait_for(time=2)              # Viewer sees initial state
+4. [ACTION: scroll, click, or type]      # Captured on video!
+5. browser_wait_for(time=2)              # Viewer sees result
+6. stop_recording()                      # STOP recording
+7. text_to_speech("Narration...")        # Generate audio
+8. adjust_video_to_audio(...)            # Sync video to audio
+9. [Repeat for next scene]
+```
+
+### Critical: Actions DURING Recording
+
+**WRONG** (static video):
+```python
+browser_scroll(400)           # Action NOT recorded
+start_recording()
+browser_wait_for(time=5)      # Records static page
+stop_recording()
+```
+
+**CORRECT** (dynamic video):
+```python
+start_recording()
+browser_wait_for(time=2)
+browser_scroll(400)           # Action CAPTURED!
+browser_wait_for(time=2)
+stop_recording()
+```
+
+## Complete Example
+
+```python
+# === SETUP ===
+browser_navigate(url="https://example.com")
+browser_resize(width=1920, height=1080)
+
+# === SCENE 1: Homepage Overview ===
+browser_snapshot()                              # Verify position
+
+start_recording(output_path="scene1_raw.mp4")   # Start recording
+browser_wait_for(time=2)                        # Initial pause
+browser_scroll(direction="down", amount=400)    # ACTION CAPTURED
+browser_wait_for(time=2)                        # End pause
+stop_recording()                                # Stop recording
+
+text_to_speech(
+    text="Welcome to our platform. As we scroll down, you can see the key features.",
+    output_path="scene1_audio.mp3"
+)
+
+adjust_video_to_audio(
+    video_path="scene1_raw.mp4",
+    audio_path="scene1_audio.mp3",
+    output_path="scene1_final.mp4"
+)
+
+# === SCENE 2: Click Feature ===
+browser_snapshot()
+
+start_recording(output_path="scene2_raw.mp4")
+browser_wait_for(time=2)
+browser_click(ref="...", element="Learn More")  # ACTION CAPTURED
+browser_wait_for(time=3)
+stop_recording()
+
+text_to_speech(
+    text="Clicking Learn More opens the detailed documentation.",
+    output_path="scene2_audio.mp3"
+)
+
+adjust_video_to_audio(
+    video_path="scene2_raw.mp4",
+    audio_path="scene2_audio.mp3",
+    output_path="scene2_final.mp4"
+)
+
+# === FINAL: Concatenate All Scenes ===
+concatenate_videos(
+    video_paths=["scene1_final.mp4", "scene2_final.mp4"],
+    output_path="demo_final.mp4"
+)
+
+media_info(file_path="demo_final.mp4")  # Verify final output
+```
 
 ## Key Principle: Speed Adjust, Never Cut
 
-When syncing video with audio, getademo uses **speed adjustment**:
+When syncing video with audio, the tool uses **speed adjustment**:
 
 - Video longer than audio → **Speeds up** (faster playback)
 - Video shorter than audio → **Slows down** (slower playback)
 - **ALL visual content is preserved** - no frames are ever cut
 
-This ensures smooth, professional demos where every action is visible.
+Keep scenes short (10-30s) for natural speed adjustments. A 20s video synced to 25s audio plays at comfortable 0.8x speed. A 90s video synced to 45s audio plays at unwatchable 2x speed.
 
-## TTS Voice Options
+## Text-to-Speech
 
-### OpenAI Voices (requires API key)
+The `text_to_speech` tool automatically selects the best available engine:
 
-| Voice | Description |
-|-------|-------------|
-| `onyx` | Deep, authoritative (recommended for tutorials) |
-| `nova` | Friendly, approachable |
-| `alloy` | Neutral, balanced |
-| `echo` | Warm, conversational |
-| `fable` | British accent |
-| `shimmer` | Soft, gentle |
+| Engine | When Used | Voice |
+|--------|-----------|-------|
+| OpenAI TTS | When `OPENAI_API_KEY` is set | "onyx" (deep, authoritative) |
+| Edge TTS | Fallback (free, no API key) | "en-US-AriaNeural" |
 
-### Edge TTS Voices (free, no API key)
-
-| Voice | Description |
-|-------|-------------|
-| `en-US-AriaNeural` | Female, natural |
-| `en-US-GuyNeural` | Male, natural |
-| `en-US-JennyNeural` | Female, friendly |
-| `en-GB-SoniaNeural` | British female |
-
-## Example: Creating a Google Search Demo
-
+No configuration needed - just call:
 ```python
-# Step 1: Navigate to Google
-browser_navigate("https://www.google.com")
-browser_resize(1920, 1080)
+text_to_speech(text="Your narration here", output_path="audio.mp3")
+```
 
-# Step 2: Generate audio and record
-text_to_speech(
-    "Let's search for information about Python programming.",
-    "step_01_audio.mp3"
-)
+## Installation Options
 
-start_recording("step_01_raw.mp4")
-browser_wait_for(time=2)
-browser_type(ref="search_box", text="Python programming", slowly=True)
-browser_press_key("Enter")
-browser_wait_for(time=3)
-stop_recording()
+### Option 1: Container (Recommended)
 
-# Step 3: Sync video with audio
-adjust_video_to_audio_length(
-    "step_01_raw.mp4",
-    "step_01_audio.mp3",
-    "step_01_final.mp4"
-)
+See Quick Start above. Benefits:
+- Headless recording works without physical display
+- Playwright browser automation included
+- Cross-platform (macOS, Linux, Windows)
+- No system dependencies to install
+
+### Option 2: From PyPI (Host Mode)
+
+```bash
+pip install "demo-recorder-mcp[all]"
+```
+
+Requires ffmpeg:
+```bash
+# macOS
+brew install ffmpeg
+
+# Ubuntu/Debian  
+sudo apt install ffmpeg
+
+# Windows (Chocolatey)
+choco install ffmpeg
+```
+
+### Option 3: From Source
+
+```bash
+git clone https://github.com/Schimuneck/demo-recorder-mcp.git
+cd demo-recorder-mcp
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[all]"
+```
+
+## Cursor MCP Configuration
+
+### Container (Recommended)
+
+```json
+{
+  "mcpServers": {
+    "demo-recorder": {
+      "command": "podman",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "/path/to/recordings:/app/recordings",
+        "-e", "OPENAI_API_KEY=sk-your-api-key-here",
+        "demo-recorder-mcp"
+      ]
+    }
+  }
+}
+```
+
+### Host Mode (Python Package)
+
+```json
+{
+  "mcpServers": {
+    "demo-recorder": {
+      "command": "demo-recorder-mcp",
+      "env": {
+        "OPENAI_API_KEY": "sk-your-api-key-here"
+      }
+    }
+  }
+}
 ```
 
 ## Troubleshooting
 
-### Screen Recording Permission (macOS)
+### Container: Black Screen Recording
 
-If recording fails:
+1. Ensure browser is navigated first: `browser_navigate(url="...")`
+2. The recording auto-detects the browser window
+3. Check recording status: `recording_status()`
+
+### Container: No Windows Found
+
+`list_windows()` requires a browser window to exist:
+```python
+# WRONG: list_windows before browser exists
+list_windows()  # Returns empty
+
+# CORRECT: navigate first, then list
+browser_navigate(url="https://example.com")
+list_windows()  # Returns Firefox window
+```
+
+### Host Mode: Screen Recording Permission (macOS)
+
 1. Go to **System Settings → Privacy & Security → Screen Recording**
-2. Add **Cursor** (or your terminal app) to the allowed list
+2. Add **Cursor** (or terminal app) to allowed list
 3. Restart Cursor
 
-### ffmpeg Not Found
+### Video Out of Sync with Audio
 
-Ensure ffmpeg is installed and in your PATH:
-
-```bash
-ffmpeg -version
-```
-
-### OpenAI API Key Not Working
-
-Set the environment variable:
-
-```bash
-export OPENAI_API_KEY="sk-your-key-here"
-```
-
-Or provide it in the MCP config (see Configuration section).
+Break demos into shorter scenes (10-30 seconds each). Long recordings require extreme speed adjustments that look unnatural.
 
 ## File Organization
 
-Recommended folder structure for demos:
-
 ```
-demo_recordings/
-├── my_demo/
-│   ├── steps/
-│   │   ├── step_01_raw.mp4
-│   │   ├── step_01_audio.mp3
-│   │   ├── step_01_final.mp4
-│   │   └── ...
-│   └── final/
-│       └── my_demo_final.mp4
+/app/recordings/
+├── scene1_raw.mp4
+├── scene1_audio.mp3
+├── scene1_final.mp4
+├── scene2_raw.mp4
+├── scene2_audio.mp3
+├── scene2_final.mp4
+└── demo_final.mp4
 ```
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Links
-
-- [GitHub Repository](https://github.com/Schimuneck/demo-recorder-mcp)
-- [Issue Tracker](https://github.com/Schimuneck/demo-recorder-mcp/issues)
-- [Changelog](CHANGELOG.md)
+MIT License - see [LICENSE](LICENSE).

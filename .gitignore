@@ -1,12 +1,8 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -20,66 +16,36 @@ parts/
 sdist/
 var/
 wheels/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Environments
-.env
-.venv
-env/
+# Virtual environments
+.venv/
 venv/
 ENV/
-env.bak/
-venv.bak/
 
 # IDEs
 .idea/
 .vscode/
 *.swp
 *.swo
-*~
 
-# macOS
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Demo recordings (keep structure, ignore content)
+recordings/*
+!recordings/.gitkeep
+demo_recordings/*/steps/*.mp4
+demo_recordings/*/steps/*.mp3
+demo_recordings/*/final/*.mp4
+
+# OS
 .DS_Store
+Thumbs.db
 
-# Demo recordings (user data)
-recordings/
-demos/
-demo_recordings/
-*.mp4
-*.mp3
-*.wav
-
-# Temporary files
-tmp/
-temp/
-*.tmp
+# Logs
+*.log

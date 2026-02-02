@@ -1,41 +1,69 @@
-"""Tests for getademo MCP server."""
+"""Tests for demo-recorder MCP server."""
 
 import pytest
 from pathlib import Path
 
 
 class TestProtocol:
-    """Tests for the demo protocol."""
+    """Tests for the demo protocol guides."""
 
-    def test_get_protocol_returns_string(self):
-        """Test that get_protocol returns the protocol document."""
-        from getademo.protocol import get_protocol
+    def test_get_planning_guide_returns_string(self):
+        """Test that get_planning_guide returns the planning document."""
+        from recorder.protocol import get_planning_guide
         
-        protocol = get_protocol()
+        guide = get_planning_guide()
         
-        assert isinstance(protocol, str)
-        assert len(protocol) > 0
-        assert "Demo Recording Protocol" in protocol
+        assert isinstance(guide, str)
+        assert len(guide) > 0
+        assert "PLANNING" in guide or "Demo Planning" in guide
 
-    def test_protocol_contains_mandatory_rules(self):
-        """Test that protocol contains the mandatory rules section."""
-        from getademo.protocol import get_protocol
+    def test_get_setup_guide_returns_string(self):
+        """Test that get_setup_guide returns the setup document."""
+        from recorder.protocol import get_setup_guide
         
-        protocol = get_protocol()
+        guide = get_setup_guide()
         
-        assert "MANDATORY RULES" in protocol
-        assert "RULE 1" in protocol
-        assert "RULE 2" in protocol
+        assert isinstance(guide, str)
+        assert len(guide) > 0
+        assert "browser" in guide.lower() or "setup" in guide.lower()
 
-    def test_protocol_contains_tool_reference(self):
-        """Test that protocol contains tool reference."""
-        from getademo.protocol import get_protocol
+    def test_get_recording_guide_returns_string(self):
+        """Test that get_recording_guide returns the recording document."""
+        from recorder.protocol import get_recording_guide
         
-        protocol = get_protocol()
+        guide = get_recording_guide()
         
-        assert "start_recording" in protocol
-        assert "stop_recording" in protocol
-        assert "text_to_speech" in protocol
+        assert isinstance(guide, str)
+        assert len(guide) > 0
+        assert "recording" in guide.lower()
+
+    def test_get_assembly_guide_returns_string(self):
+        """Test that get_assembly_guide returns the assembly document."""
+        from recorder.protocol import get_assembly_guide
+        
+        guide = get_assembly_guide()
+        
+        assert isinstance(guide, str)
+        assert len(guide) > 0
+
+    def test_guides_contain_tool_references(self):
+        """Test that guides reference the core tools."""
+        from recorder.protocol import get_planning_guide, get_recording_guide, get_assembly_guide
+        
+        all_guides = get_planning_guide() + get_recording_guide() + get_assembly_guide()
+        
+        assert "start_recording" in all_guides
+        assert "stop_recording" in all_guides
+        assert "text_to_speech" in all_guides
+
+    def test_guides_emphasize_actions_during_recording(self):
+        """Test that guides emphasize performing actions during recording."""
+        from recorder.protocol import get_recording_guide
+        
+        guide = get_recording_guide()
+        
+        # Should warn against actions outside recording
+        assert "WRONG" in guide or "CORRECT" in guide or "DURING" in guide
 
 
 class TestServerSetup:
@@ -43,14 +71,14 @@ class TestServerSetup:
 
     def test_server_module_imports(self):
         """Test that the server module can be imported."""
-        from getademo import server
+        from recorder import server
         
         assert hasattr(server, 'server')
         assert hasattr(server, 'run')
 
     def test_server_has_tools(self):
         """Test that tools are defined."""
-        from getademo import server
+        from recorder import server
         
         # The server object should exist
         assert server.server is not None
@@ -62,33 +90,59 @@ class TestToolDefinitions:
     @pytest.mark.asyncio
     async def test_list_tools_returns_expected_tools(self):
         """Test that list_tools returns expected tools."""
-        from getademo.server import list_tools
+        from recorder.server import list_tools
         
         tools = await list_tools()
         tool_names = [t.name for t in tools]
         
+        # Core recording tools
         expected_tools = [
             "start_recording",
             "stop_recording",
             "recording_status",
             "text_to_speech",
-            "replace_video_audio",
-            "merge_audio_tracks",
-            "trim_video",
-            "get_media_info",
+            "media_info",
             "concatenate_videos",
-            "get_audio_duration",
-            "adjust_video_to_audio_length",
-            "get_demo_protocol",
+            "adjust_video_to_audio",
+            # Protocol guides
+            "planning_phase_1",
+            "setup_phase_2",
+            "recording_phase_3",
+            "editing_phase_4",
+            # Utility tools
+            "list_windows",
+            "window_tools",
         ]
         
         for expected in expected_tools:
             assert expected in tool_names, f"Missing tool: {expected}"
 
     @pytest.mark.asyncio
+    async def test_removed_tools_not_present(self):
+        """Test that removed tools are not in the list."""
+        from recorder.server import list_tools
+        
+        tools = await list_tools()
+        tool_names = [t.name for t in tools]
+        
+        removed_tools = [
+            "replace_video_audio",
+            "merge_audio_tracks",
+            "trim_video",
+            "get_audio_duration",
+            "focus_window",
+            "get_window_bounds",
+            "list_screens",
+            "get_demo_protocol",
+        ]
+        
+        for removed in removed_tools:
+            assert removed not in tool_names, f"Tool should be removed: {removed}"
+
+    @pytest.mark.asyncio
     async def test_tools_have_descriptions(self):
         """Test that all tools have descriptions."""
-        from getademo.server import list_tools
+        from recorder.server import list_tools
         
         tools = await list_tools()
         
@@ -99,7 +153,7 @@ class TestToolDefinitions:
     @pytest.mark.asyncio
     async def test_tools_have_input_schemas(self):
         """Test that all tools have input schemas."""
-        from getademo.server import list_tools
+        from recorder.server import list_tools
         
         tools = await list_tools()
         
@@ -107,13 +161,50 @@ class TestToolDefinitions:
             assert tool.inputSchema, f"Tool {tool.name} missing input schema"
             assert "type" in tool.inputSchema
 
+    @pytest.mark.asyncio
+    async def test_start_recording_has_simplified_schema(self):
+        """Test that start_recording has simplified parameters."""
+        from recorder.server import list_tools
+        
+        tools = await list_tools()
+        start_recording = next(t for t in tools if t.name == "start_recording")
+        
+        properties = start_recording.inputSchema.get("properties", {})
+        
+        # Should have output_path and optionally window_title
+        assert "output_path" in properties or properties == {}
+        
+        # Should NOT have width, height, fps (removed)
+        assert "width" not in properties
+        assert "height" not in properties
+        assert "fps" not in properties
+
+    @pytest.mark.asyncio
+    async def test_text_to_speech_has_simplified_schema(self):
+        """Test that text_to_speech has simplified parameters."""
+        from recorder.server import list_tools
+        
+        tools = await list_tools()
+        tts = next(t for t in tools if t.name == "text_to_speech")
+        
+        properties = tts.inputSchema.get("properties", {})
+        
+        # Should have text and output_path
+        assert "text" in properties
+        assert "output_path" in properties
+        
+        # Should NOT have voice, engine, api_key (removed)
+        assert "voice" not in properties
+        assert "engine" not in properties
+        assert "api_key" not in properties
+
 
 class TestFfmpegPath:
     """Tests for ffmpeg path detection."""
 
     def test_get_ffmpeg_path_common_paths(self):
         """Test that common ffmpeg paths are checked."""
-        from getademo.server import get_ffmpeg_path
+        from recorder.server import get_ffmpeg_path
         
         # This may raise RuntimeError if ffmpeg is not installed
         # but it should not raise other exceptions
@@ -125,31 +216,29 @@ class TestFfmpegPath:
             assert "ffmpeg not found" in str(e)
 
 
-class TestScreenCaptureArgs:
-    """Tests for screen capture arguments."""
+class TestWindowManager:
+    """Tests for window manager functionality."""
 
-    def test_get_screen_capture_args_macos(self):
-        """Test macOS screen capture arguments."""
-        import sys
-        from getademo.server import get_screen_capture_args
+    def test_window_manager_imports(self):
+        """Test that window manager can be imported."""
+        from recorder import window_manager
         
-        if sys.platform == "darwin":
-            args = get_screen_capture_args(screen_index=1)
-            assert "-f" in args
-            assert "avfoundation" in args
-            assert "-capture_cursor" in args
+        assert hasattr(window_manager, 'list_windows')
+        assert hasattr(window_manager, 'check_dependencies')
 
-    def test_screen_index_in_args(self):
-        """Test that screen index is used in arguments."""
-        import sys
-        from getademo.server import get_screen_capture_args
+    def test_window_manager_has_list_windows(self):
+        """Test that list_windows function exists."""
+        from recorder.window_manager import list_windows
         
-        if sys.platform == "darwin":
-            args1 = get_screen_capture_args(screen_index=1)
-            args2 = get_screen_capture_args(screen_index=2)
-            
-            # The screen index should be different in the args
-            assert "1:none" in str(args1)
-            assert "2:none" in str(args2)
+        assert callable(list_windows)
 
-
+    def test_window_manager_has_check_dependencies(self):
+        """Test that check_dependencies function exists."""
+        from recorder.window_manager import check_dependencies
+        
+        assert callable(check_dependencies)
+        
+        # Should return a dict with platform info
+        result = check_dependencies()
+        assert isinstance(result, dict)
+        assert "platform" in result

@@ -1,0 +1,58 @@
+# Python virtual environments
+.venv/
+venv/
+ENV/
+__pycache__/
+*.pyc
+*.pyo
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Demo recordings (don't include in build)
+demo_recordings/
+recordings/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Lock files (will be regenerated)
+uv.lock
+
+# Tests
+tests/
+.pytest_cache/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
