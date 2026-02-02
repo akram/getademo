@@ -45,6 +45,7 @@ def get_video_url(file_path: Path) -> Optional[str]:
     
     Only works when running in a container with the video server.
     Returns None if the file is not in the recordings directory.
+    Uses HTTPS for public domains, HTTP for localhost.
     """
     if not is_container_environment():
         return None
@@ -52,7 +53,13 @@ def get_video_url(file_path: Path) -> Optional[str]:
     try:
         # Check if file is under recordings dir
         rel_path = file_path.resolve().relative_to(CONTAINER_RECORDINGS_DIR.resolve())
-        return f"http://{VIDEO_SERVER_HOST}:{VIDEO_SERVER_PORT}/videos/{rel_path}"
+        
+        # Use HTTPS for public domains, HTTP for localhost
+        if VIDEO_SERVER_HOST in ("localhost", "127.0.0.1"):
+            return f"http://{VIDEO_SERVER_HOST}:{VIDEO_SERVER_PORT}/videos/{rel_path}"
+        else:
+            # Public domain - use HTTPS without port (reverse proxy handles SSL)
+            return f"https://{VIDEO_SERVER_HOST}/videos/{rel_path}"
     except ValueError:
         # File is not in recordings directory
         return None
@@ -292,13 +299,7 @@ server = Server("getademo")
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
-    """List available tools.
-    
-    OpenAI Compatibility Notes:
-    - All schemas include "additionalProperties": false (required for strict mode)
-    - Tools with no parameters use empty properties object
-    - Array parameters (concatenate_videos) are supported but may need special handling
-    """
+    """List available tools."""
     return [
         Tool(
             name="start_recording",
