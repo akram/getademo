@@ -8,7 +8,12 @@ This module contains the demo recording protocol split into focused guides:
 4. get_assembly_guide() - Phase 4: Post-recording assembly and troubleshooting
 
 The original get_protocol() is deprecated but kept for backwards compatibility.
+
+Guides are MODE-AWARE: Container mode shows Xvfb/Firefox-specific content,
+while Host mode shows platform-native (macOS/Linux/Windows) content.
 """
+
+from ..core.config import is_container_environment
 
 # =============================================================================
 # PHASE 1: PLANNING GUIDE
@@ -213,17 +218,21 @@ NEXT: Call setup_phase_2() for browser setup and verification.
 
 
 # =============================================================================
-# PHASE 2: RECORDING SETUP GUIDE
+# PHASE 2: RECORDING SETUP GUIDE (MODE-AWARE)
 # =============================================================================
 
-SETUP_GUIDE = """
+# Common sections shared between container and host modes
+SETUP_GUIDE_HEADER = """
 # Phase 2: Recording Setup
 
 Pre-recording setup and verification. Call after planning_phase_1().
 Next phase: recording_phase_3()
 
 ---
+"""
 
+# Container-specific environment section
+SETUP_GUIDE_CONTAINER_ENV = """
 ## REMINDER: Real Video Recording Works
 
 Use start_recording() and stop_recording() - they produce REAL video files.
@@ -239,20 +248,80 @@ This is not a workaround - this is the intended, working approach.
 Xvfb virtual display at :99, resolution 2560x1440 (plenty of headroom).
 Firefox browser renders to this display with NO window decorations.
 Recording captures via FFmpeg x11grab.
+"""
 
-## Browser Sizing
+# Host-specific environment section
+SETUP_GUIDE_HOST_ENV = """
+## Recording Environment
 
-Use standard video resolutions for best results:
-- 1920x1080 (1080p) - Recommended for most demos
-- 1280x720 (720p) - Good for smaller file sizes
+Recording uses native screen capture for your platform:
+- macOS: AVFoundation with multi-monitor support
+- Linux: x11grab from your display
+- Windows: gdigrab
 
-Call browser_resize(width=1920, height=1080) BEFORE recording.
-Dimensions are auto-rounded to even numbers (FFmpeg requirement).
+The recorder auto-detects your browser window (Chrome, Firefox, Safari, Arc, Brave, Edge, or Cursor IDE's embedded browser).
 
+## RECOMMENDED: Make Window Fullscreen
+
+For the best demo quality, make your browser window fullscreen before recording:
+
+```python
+fullscreen_window()                    # Auto-detects browser
+# OR specify the browser:
+fullscreen_window(window_title="Chrome")
+```
+
+This tool:
+- macOS: Enters native fullscreen mode (green button)
+- Linux: Sets fullscreen state via wmctrl
+- Windows: Maximizes the window
+
+**Wait 1-2 seconds after fullscreen** before starting to record (especially on macOS where the animation takes time).
+"""
+
+# Container recording flow section
+SETUP_GUIDE_CONTAINER_FLOW = """
 ## Simple Recording Flow
 
 1. browser_navigate(url)     # Opens browser
-2. browser_resize(1920, 1080)  # Set video size
+2. start_recording()         # Auto-detects browser - no args needed!
+3. [perform demo actions]
+4. stop_recording()          # Saves video
+
+---
+
+## One-Time Setup (Start of Demo)
+
+Execute these steps IN ORDER before recording any steps:
+
+```
+1. NAVIGATE FIRST (creates the browser window)
+   browser_navigate(url="https://your-target-site.com")
+   # CRITICAL: Browser window only exists AFTER navigation
+   # Without this step, list_windows() will find nothing
+
+2. VERIFY WINDOW EXISTS
+   list_windows()
+   # Expected output includes the browser window title
+   # If empty: You forgot step 1 (navigate). Go back.
+
+3. VERIFY CONTENT
+   browser_snapshot()
+   # Examine: Is correct page showing? Is content visible?
+```
+
+IMPORTANT: The browser window does NOT exist until browser_navigate() is called.
+If list_windows() returns empty, ensure you navigated to a URL first.
+
+---
+"""
+
+# Host recording flow section (includes fullscreen step)
+SETUP_GUIDE_HOST_FLOW = """
+## Simple Recording Flow
+
+1. browser_navigate(url)     # Opens browser
+2. fullscreen_window()       # Make browser fullscreen (recommended)
 3. start_recording()         # Auto-detects browser - no args needed!
 4. [perform demo actions]
 5. stop_recording()          # Saves video
@@ -269,24 +338,28 @@ Execute these steps IN ORDER before recording any steps:
    # CRITICAL: Browser window only exists AFTER navigation
    # Without this step, list_windows() will find nothing
 
-2. RESIZE BROWSER
-   browser_resize(width=1920, height=1080)
-
-3. VERIFY WINDOW EXISTS
+2. VERIFY WINDOW EXISTS
    list_windows()
-   # Expected output includes: Firefox - [page title]
+   # Expected output includes the browser window title
    # If empty: You forgot step 1 (navigate). Go back.
+
+3. MAKE FULLSCREEN (recommended for best quality)
+   fullscreen_window()
+   # Wait 1-2 seconds for the fullscreen transition to complete
 
 4. VERIFY CONTENT
    browser_snapshot()
    # Examine: Is correct page showing? Is content visible?
 ```
 
-IMPORTANT: The Firefox window does NOT exist until browser_navigate() is called.
+IMPORTANT: The browser window does NOT exist until browser_navigate() is called.
 If list_windows() returns empty, ensure you navigated to a URL first.
 
 ---
+"""
 
+# Container-specific recording configuration
+SETUP_GUIDE_CONTAINER_CONFIG = """
 ## Recording Configuration
 
 ```python
@@ -300,7 +373,27 @@ The tool automatically:
 - Captures the Firefox window from Xvfb
 - Uses 30fps
 - Detects window dimensions
+"""
 
+# Host-specific recording configuration
+SETUP_GUIDE_HOST_CONFIG = """
+## Recording Configuration
+
+```python
+start_recording(
+    window_title="Google Chrome",     # From list_windows() output (or your browser)
+    output_path="stepN_raw.mp4"       # Saved to ~/recordings/
+)
+```
+
+The tool automatically:
+- Captures the browser window using native screen capture
+- Uses 30fps
+- Detects window dimensions
+"""
+
+# Common verification section
+SETUP_GUIDE_VERIFICATION = """
 ---
 
 ## Per-Step Verification
@@ -339,13 +432,28 @@ Recording:
 | adjust_video_to_audio  | Sync video speed to audio duration   |
 | concatenate_videos     | Join videos into final output        |
 | media_info             | Get file duration/resolution         |
+"""
 
+# Container-specific window tools section
+SETUP_GUIDE_CONTAINER_TOOLS = """
 Window:
 | Tool          | Purpose                              |
 |---------------|--------------------------------------|
 | list_windows  | List windows in virtual display      |
 | window_tools  | Check tool availability              |
+"""
 
+# Host-specific window tools section
+SETUP_GUIDE_HOST_TOOLS = """
+Window:
+| Tool          | Purpose                              |
+|---------------|--------------------------------------|
+| list_windows  | List windows on your display         |
+| window_tools  | Check tool availability              |
+"""
+
+# Common browser tools section
+SETUP_GUIDE_BROWSER_TOOLS = """
 Browser (from Playwright MCP):
 | Tool             | Purpose                           |
 |------------------|-----------------------------------|
@@ -353,11 +461,13 @@ Browser (from Playwright MCP):
 | browser_snapshot | Capture page state/screenshot     |
 | browser_click    | Click element                     |
 | browser_type     | Type text                         |
-| browser_resize   | Set viewport dimensions           |
 | browser_evaluate | Execute JavaScript                |
 
 ---
+"""
 
+# Container-specific common issues
+SETUP_GUIDE_CONTAINER_ISSUES = """
 ## Common Issues
 
 | Issue                    | Cause                      | Fix                           |
@@ -366,12 +476,54 @@ Browser (from Playwright MCP):
 | Window not found         | Wrong window_title         | Run list_windows(), use exact pattern |
 | Recording empty/black    | Browser not in Xvfb        | Verify with browser_snapshot() |
 | Wrong content recorded   | Skipped verification       | Always snapshot before recording |
-| Inconsistent sizing      | Changed browser size       | Set size ONCE, keep constant  |
+"""
 
+# Host-specific common issues
+SETUP_GUIDE_HOST_ISSUES = """
+## Common Issues
+
+| Issue                    | Cause                      | Fix                           |
+|--------------------------|----------------------------|-------------------------------|
+| list_windows() empty     | No browser navigation yet  | Call browser_navigate(url) FIRST |
+| Window not found         | Wrong window_title         | Run list_windows(), use exact pattern |
+| Recording empty/black    | Window not visible/minimized | Ensure browser window is visible |
+| Permission denied (macOS)| Screen recording not allowed | Grant permission in System Settings > Privacy > Screen Recording |
+| Wrong content recorded   | Skipped verification       | Always snapshot before recording |
+"""
+
+SETUP_GUIDE_FOOTER = """
 ---
 
 NEXT: Call recording_phase_3() for in-recording actions.
 """
+
+
+def _build_setup_guide(is_container: bool) -> str:
+    """Build the setup guide with mode-appropriate content."""
+    if is_container:
+        return (
+            SETUP_GUIDE_HEADER +
+            SETUP_GUIDE_CONTAINER_ENV +
+            SETUP_GUIDE_CONTAINER_FLOW +
+            SETUP_GUIDE_CONTAINER_CONFIG +
+            SETUP_GUIDE_VERIFICATION +
+            SETUP_GUIDE_CONTAINER_TOOLS +
+            SETUP_GUIDE_BROWSER_TOOLS +
+            SETUP_GUIDE_CONTAINER_ISSUES +
+            SETUP_GUIDE_FOOTER
+        )
+    else:
+        return (
+            SETUP_GUIDE_HEADER +
+            SETUP_GUIDE_HOST_ENV +
+            SETUP_GUIDE_HOST_FLOW +
+            SETUP_GUIDE_HOST_CONFIG +
+            SETUP_GUIDE_VERIFICATION +
+            SETUP_GUIDE_HOST_TOOLS +
+            SETUP_GUIDE_BROWSER_TOOLS +
+            SETUP_GUIDE_HOST_ISSUES +
+            SETUP_GUIDE_FOOTER
+        )
 
 
 # =============================================================================
@@ -583,10 +735,10 @@ NEXT: Call editing_phase_4() for audio sync and final assembly.
 
 
 # =============================================================================
-# PHASE 4: VIDEO ASSEMBLY GUIDE
+# PHASE 4: VIDEO ASSEMBLY GUIDE (MODE-AWARE)
 # =============================================================================
 
-ASSEMBLY_GUIDE = """
+ASSEMBLY_GUIDE_MAIN = """
 # Phase 4: Video Assembly
 
 Post-recording: script writing, audio sync, and final concatenation.
@@ -695,7 +847,10 @@ media_info(file_path="demo_final.mp4")
 ```
 
 ---
+"""
 
+# Container-specific file structure
+ASSEMBLY_GUIDE_CONTAINER_FILES = """
 ## File Structure
 
 ```
@@ -709,7 +864,28 @@ media_info(file_path="demo_final.mp4")
   ...
   demo_final.mp4
 ```
+"""
 
+# Host-specific file structure
+ASSEMBLY_GUIDE_HOST_FILES = """
+## File Structure
+
+```
+~/recordings/
+  step1_raw.mp4
+  step1_audio.mp3
+  step1_final.mp4
+  step2_raw.mp4
+  step2_audio.mp3
+  step2_final.mp4
+  ...
+  demo_final.mp4
+```
+
+Note: You can customize the recordings directory by setting the RECORDINGS_DIR environment variable.
+"""
+
+ASSEMBLY_GUIDE_FOOTER = """
 ---
 
 ## Quality Checklist
@@ -754,6 +930,22 @@ If step N fails:
 - recording_phase_3() - Recording actions
 - editing_phase_4() - This guide
 """
+
+
+def _build_assembly_guide(is_container: bool) -> str:
+    """Build the assembly guide with mode-appropriate content."""
+    if is_container:
+        return (
+            ASSEMBLY_GUIDE_MAIN +
+            ASSEMBLY_GUIDE_CONTAINER_FILES +
+            ASSEMBLY_GUIDE_FOOTER
+        )
+    else:
+        return (
+            ASSEMBLY_GUIDE_MAIN +
+            ASSEMBLY_GUIDE_HOST_FILES +
+            ASSEMBLY_GUIDE_FOOTER
+        )
 
 
 # =============================================================================
@@ -801,23 +993,39 @@ Each guide is focused (~200 lines) and provides clear next steps.
 # =============================================================================
 
 def get_planning_guide() -> str:
-    """Phase 1: Return the demo planning guide."""
+    """Phase 1: Return the demo planning guide.
+    
+    This guide is mode-independent (same content for container and host).
+    """
     return PLANNING_GUIDE
 
 
 def get_setup_guide() -> str:
-    """Phase 2: Return the recording setup guide."""
-    return SETUP_GUIDE
+    """Phase 2: Return the recording setup guide.
+    
+    This guide is MODE-AWARE:
+    - Container mode: Shows Xvfb, Firefox, /app/recordings/ content
+    - Host mode: Shows platform-native capture, ~/recordings/ content
+    """
+    return _build_setup_guide(is_container_environment())
 
 
 def get_recording_guide() -> str:
-    """Phase 3: Return the recording actions guide."""
+    """Phase 3: Return the recording actions guide.
+    
+    This guide is mode-independent (same content for container and host).
+    """
     return RECORDING_GUIDE
 
 
 def get_assembly_guide() -> str:
-    """Phase 4: Return the video assembly guide."""
-    return ASSEMBLY_GUIDE
+    """Phase 4: Return the video assembly guide.
+    
+    This guide is MODE-AWARE:
+    - Container mode: Shows /app/recordings/ file structure
+    - Host mode: Shows ~/recordings/ file structure
+    """
+    return _build_assembly_guide(is_container_environment())
 
 
 def get_protocol() -> str:

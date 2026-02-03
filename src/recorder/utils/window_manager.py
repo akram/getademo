@@ -108,8 +108,171 @@ def check_dependencies() -> dict:
 # macOS Backend
 # =============================================================================
 
-def _macos_list_windows() -> List[WindowInfo]:
-    """List windows on macOS using AppleScript."""
+def _macos_list_windows_cg() -> List[WindowInfo]:
+    """List windows on macOS using CGWindowListCopyWindowInfo (most reliable for Chrome)."""
+    script = '''
+use framework "Foundation"
+use framework "AppKit"
+use scripting additions
+
+set windowList to ""
+set theWindows to current application's CGWindowListCopyWindowInfo((current application's kCGWindowListOptionOnScreenOnly), 0)
+
+repeat with i from 1 to count of theWindows
+    set theWindow to item i of (theWindows as list)
+    set ownerName to ""
+    set windowName to ""
+    set windowID to 0
+    set ownerPID to 0
+    set boundsStr to "0,0,0,0"
+    
+    try
+        set ownerName to theWindow's kCGWindowOwnerName as text
+    end try
+    try
+        set windowName to theWindow's kCGWindowName as text
+    end try
+    try
+        set windowID to theWindow's kCGWindowNumber as integer
+    end try
+    try
+        set ownerPID to theWindow's kCGWindowOwnerPID as integer
+    end try
+    try
+        set theBounds to theWindow's kCGWindowBounds
+        set bX to theBounds's X as integer
+        set bY to theBounds's Y as integer
+        set bW to theBounds's Width as integer
+        set bH to theBounds's Height as integer
+        set boundsStr to (bX as text) & "," & (bY as text) & "," & (bW as text) & "," & (bH as text)
+    end try
+    
+    -- Skip windows with no name and small size (likely UI elements)
+    if windowName is not "" or ownerName contains "Chrome" or ownerName contains "Chromium" then
+        set windowList to windowList & windowID & "||" & ownerPID & "||" & ownerName & "||" & windowName & "||" & boundsStr & linefeed
+    end if
+end repeat
+
+return windowList
+'''
+    
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=15
+        )
+        
+        windows = []
+        output = result.stdout.strip()
+        
+        for line in output.split("\n"):
+            line = line.strip()
+            if not line or "||" not in line:
+                continue
+            parts = line.split("||")
+            if len(parts) >= 5:
+                window_id_str, pid_str, app_name, title, bounds_str = parts[0], parts[1], parts[2], parts[3], parts[4]
+                
+                # Parse bounds
+                try:
+                    bounds_parts = bounds_str.split(",")
+                    bounds = WindowBounds(
+                        x=int(float(bounds_parts[0])),
+                        y=int(float(bounds_parts[1])),
+                        width=int(float(bounds_parts[2])),
+                        height=int(float(bounds_parts[3]))
+                    )
+                except (ValueError, IndexError):
+                    bounds = None
+                
+                # Skip tiny windows (likely UI chrome elements)
+                if bounds and bounds.width < 50 and bounds.height < 50:
+                    continue
+                
+                display_title = title if title else app_name
+                windows.append(WindowInfo(
+                    title=display_title,
+                    window_id=window_id_str,
+                    pid=int(pid_str) if pid_str.isdigit() else None,
+                    bounds=bounds,
+                    app_name=app_name
+                ))
+        
+        return windows
+    except Exception:
+        return []
+
+
+def _macos_list_chrome_windows() -> List[WindowInfo]:
+    """List Chrome windows by querying Chrome directly (catches Playwright windows)."""
+    script = '''
+set output to ""
+try
+    tell application "Google Chrome"
+        set windowCount to count of windows
+        repeat with i from 1 to windowCount
+            set w to window i
+            set tabTitles to ""
+            try
+                set activeTab to active tab of w
+                set tabTitles to title of activeTab
+            end try
+            set winBounds to bounds of w
+            set bX to item 1 of winBounds
+            set bY to item 2 of winBounds
+            set bW to (item 3 of winBounds) - bX
+            set bH to (item 4 of winBounds) - bY
+            set output to output & i & "||" & "Google Chrome" & "||" & tabTitles & "||" & bX & "," & bY & "," & bW & "," & bH & linefeed
+        end repeat
+    end tell
+end try
+return output
+'''
+    
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        windows = []
+        output = result.stdout.strip()
+        
+        for line in output.split("\n"):
+            line = line.strip()
+            if not line or "||" not in line:
+                continue
+            parts = line.split("||")
+            if len(parts) >= 4:
+                window_idx, app_name, title, bounds_str = parts[0], parts[1], parts[2], parts[3]
+                
+                try:
+                    bounds_parts = bounds_str.split(",")
+                    bounds = WindowBounds(
+                        x=int(float(bounds_parts[0])),
+                        y=int(float(bounds_parts[1])),
+                        width=int(float(bounds_parts[2])),
+                        height=int(float(bounds_parts[3]))
+                    )
+                except (ValueError, IndexError):
+                    bounds = None
+                
+                if title:  # Only add if we have a title
+                    windows.append(WindowInfo(
+                        title=title,
+                        window_id=f"chrome:{window_idx}",
+                        pid=None,
+                        bounds=bounds,
+                        app_name=app_name
+                    ))
+        
+        return windows
+    except Exception:
+        return []
+
+
+def _macos_list_windows_system_events() -> List[WindowInfo]:
+    """List windows on macOS using System Events AppleScript."""
     script = '''
 set output to ""
 tell application "System Events"
@@ -151,9 +314,6 @@ return output
         windows = []
         output = result.stdout.strip()
         
-        if not output:
-            return _macos_list_windows_fallback()
-        
         for line in output.split("\n"):
             line = line.strip()
             if not line or "||" not in line:
@@ -187,6 +347,52 @@ return output
         raise
     except Exception as e:
         raise WindowManagerError(f"Failed to list windows: {e}")
+
+
+def _macos_list_windows() -> List[WindowInfo]:
+    """List windows on macOS using multiple methods for best coverage."""
+    # Track seen windows by title to avoid duplicates
+    seen_titles = set()
+    all_windows = []
+    
+    # Method 1: CGWindowListCopyWindowInfo - best for catching all windows including Chrome
+    try:
+        cg_windows = _macos_list_windows_cg()
+        for win in cg_windows:
+            key = (win.app_name, win.title)
+            if key not in seen_titles:
+                seen_titles.add(key)
+                all_windows.append(win)
+    except Exception:
+        pass
+    
+    # Method 2: Query Chrome directly - catches Playwright-controlled Chrome windows
+    try:
+        chrome_windows = _macos_list_chrome_windows()
+        for win in chrome_windows:
+            # Check if we already have this Chrome window by title
+            if not any(w.title == win.title and "Chrome" in (w.app_name or "") for w in all_windows):
+                all_windows.append(win)
+    except Exception:
+        pass
+    
+    # Method 3: System Events fallback - good for general window management
+    if not all_windows:
+        try:
+            se_windows = _macos_list_windows_system_events()
+            for win in se_windows:
+                key = (win.app_name, win.title)
+                if key not in seen_titles:
+                    seen_titles.add(key)
+                    all_windows.append(win)
+        except Exception:
+            pass
+    
+    # Final fallback: just list running apps
+    if not all_windows:
+        return _macos_list_windows_fallback()
+    
+    return all_windows
 
 
 def _macos_list_windows_fallback() -> List[WindowInfo]:
@@ -350,6 +556,63 @@ def _macos_get_window_id(title_pattern: str) -> Optional[int]:
         return None
 
 
+def _macos_fullscreen_window(title_pattern: str) -> bool:
+    """Make a window fullscreen on macOS using AppleScript."""
+    pattern = re.compile(title_pattern, re.IGNORECASE)
+    
+    try:
+        windows = _macos_list_windows()
+    except WindowManagerError:
+        windows = []
+    
+    matching = None
+    for win in windows:
+        if pattern.search(win.title or '') or (win.app_name and pattern.search(win.app_name)):
+            matching = win
+            break
+    
+    if not matching:
+        raise WindowNotFoundError(f"No window matching '{title_pattern}'")
+    
+    escaped_app = matching.app_name.replace('"', '\\"') if matching.app_name else ""
+    
+    # Use System Events to enter fullscreen mode via AXFullScreen button or keyboard shortcut
+    script = f'''
+tell application "System Events"
+    set targetProc to first application process whose name is "{escaped_app}"
+    set frontmost of targetProc to true
+    delay 0.3
+    -- Try to click the fullscreen button (green button)
+    try
+        set targetWindow to front window of targetProc
+        click (first button of targetWindow whose subrole is "AXFullScreenButton")
+        return "ok"
+    on error
+        -- Fallback: use keyboard shortcut Ctrl+Cmd+F
+        keystroke "f" using {{control down, command down}}
+        return "ok"
+    end try
+end tell
+'''
+    
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=10
+        )
+        if "ok" in result.stdout:
+            return True
+        if result.returncode != 0:
+            raise WindowManagerError(f"AppleScript error: {result.stderr}")
+        return True
+    except subprocess.TimeoutExpired:
+        raise WindowManagerError("Timeout making window fullscreen")
+    except WindowManagerError:
+        raise
+    except Exception as e:
+        raise WindowManagerError(f"Failed to make window fullscreen: {e}")
+
+
 # =============================================================================
 # Linux Backend
 # =============================================================================
@@ -454,6 +717,36 @@ def _linux_get_window_id(title_pattern: str) -> Optional[str]:
         return None
 
 
+def _linux_fullscreen_window(title_pattern: str) -> bool:
+    """Make a window fullscreen on Linux using wmctrl."""
+    _linux_check_deps()
+    
+    windows = _linux_list_windows()
+    pattern = re.compile(title_pattern, re.IGNORECASE)
+    
+    matching = None
+    for win in windows:
+        if pattern.search(win.title):
+            matching = win
+            break
+    
+    if not matching:
+        raise WindowNotFoundError(f"No window matching '{title_pattern}'")
+    
+    try:
+        # Remove any existing fullscreen state first, then add it
+        # -b add,fullscreen adds the fullscreen state
+        subprocess.run(
+            ["wmctrl", "-i", "-r", matching.window_id, "-b", "add,fullscreen"],
+            capture_output=True, timeout=5
+        )
+        return True
+    except subprocess.TimeoutExpired:
+        raise WindowManagerError("Timeout making window fullscreen")
+    except Exception as e:
+        raise WindowManagerError(f"Failed to make window fullscreen: {e}")
+
+
 # =============================================================================
 # Windows Backend
 # =============================================================================
@@ -549,6 +842,32 @@ def _windows_get_window_id(title_pattern: str) -> Optional[str]:
     return None
 
 
+def _windows_fullscreen_window(title_pattern: str) -> bool:
+    """Make a window fullscreen (maximized) on Windows."""
+    import ctypes
+    
+    windows = _windows_list_windows()
+    pattern = re.compile(title_pattern, re.IGNORECASE)
+    
+    matching = None
+    for win in windows:
+        if pattern.search(win.title):
+            matching = win
+            break
+    
+    if not matching:
+        raise WindowNotFoundError(f"No window matching '{title_pattern}'")
+    
+    user32 = ctypes.windll.user32
+    hwnd = int(matching.window_id)
+    
+    # SW_MAXIMIZE = 3
+    SW_MAXIMIZE = 3
+    user32.ShowWindow(hwnd, SW_MAXIMIZE)
+    
+    return True
+
+
 # =============================================================================
 # Public API
 # =============================================================================
@@ -608,3 +927,32 @@ def get_window_id(title_pattern: str) -> Optional[str]:
         return _windows_get_window_id(title_pattern)
     else:
         return None
+
+
+def fullscreen_window(title_pattern: str) -> bool:
+    """Make a window fullscreen by title pattern.
+    
+    On macOS: Uses the native fullscreen mode (green button / Ctrl+Cmd+F)
+    On Linux: Uses wmctrl to add fullscreen state
+    On Windows: Maximizes the window
+    
+    Args:
+        title_pattern: Regex pattern to match window title or app name
+        
+    Returns:
+        True if successful
+        
+    Raises:
+        WindowNotFoundError: No window matching the pattern
+        WindowManagerError: Failed to make window fullscreen
+    """
+    platform = get_platform()
+    
+    if platform == "macos":
+        return _macos_fullscreen_window(title_pattern)
+    elif platform == "linux":
+        return _linux_fullscreen_window(title_pattern)
+    elif platform == "windows":
+        return _windows_fullscreen_window(title_pattern)
+    else:
+        raise WindowManagerError(f"Unsupported platform: {platform}")

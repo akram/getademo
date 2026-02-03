@@ -12,11 +12,11 @@ An MCP (Model Context Protocol) server that enables AI agents to create professi
 
 ## Three Access Modes
 
-| Mode | Transport | Browser | Use Case |
-|------|-----------|---------|----------|
+| Mode | Transport | Browser Automation | Use Case |
+|------|-----------|-------------------|----------|
 | **Container STDIO** | STDIO | Playwright (included) | **Recommended** - Self-contained, all 36 tools |
 | **Container HTTP** | HTTP/SSE | Playwright (included) | OpenAI Responses API, remote access |
-| **Host** | STDIO | cursor-browser-extension | Native browser, macOS screen capture |
+| **Host** | STDIO | Playwright MCP (recommended) or cursor-browser-extension | Native browser, macOS screen capture, `fullscreen_window` tool |
 
 ## Quick Start
 
@@ -125,7 +125,15 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[all]"
 ```
 
-Add to Cursor MCP settings:
+> **Note:** Container mode is still the **overall recommended approach** as it's fully self-contained with all tools included. Use host mode when you need native screen capture or the `fullscreen_window` feature.
+
+#### If Using Host Mode: Pair with Playwright MCP
+
+For the best experience in host mode, we **strongly recommend** using demo-recorder-mcp alongside the **Playwright MCP server**. This gives you the same browser automation tools (`browser_navigate`, `browser_click`, `browser_snapshot`, etc.) that are included in container mode.
+
+**Important:** When using Playwright MCP, we recommend **disabling Cursor's built-in browser automation** to avoid conflicts. In Cursor settings, go to **Settings → Tools & MCPO → Browser Automation** and turn it off.
+
+Add both servers to your Cursor MCP settings (`~/.cursor/mcp.json`):
 
 ```json
 {
@@ -136,12 +144,27 @@ Add to Cursor MCP settings:
         "OPENAI_API_KEY": "sk-your-key",
         "RECORDINGS_DIR": "/path/to/recordings"
       }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@anthropic-ai/mcp-server-playwright"]
     }
   }
 }
 ```
 
-Host mode uses **cursor-browser-extension** for browser automation - the demo-recorder captures the visible browser window.
+> **Note:** Playwright MCP requires Node.js. Install with: `npm install -g @anthropic-ai/mcp-server-playwright`
+
+#### Host Mode Exclusive: `fullscreen_window` Tool
+
+Host mode includes the `fullscreen_window` tool (not available in container mode) that makes your browser window fullscreen for better quality recordings:
+
+```python
+browser_navigate(url="https://example.com")
+fullscreen_window()  # Makes browser fullscreen (macOS/Linux/Windows)
+start_recording()
+# ... demo actions ...
+```
 
 ## Architecture
 
@@ -160,12 +183,16 @@ Host mode uses **cursor-browser-extension** for browser automation - the demo-re
 ┌─────────────────────────────────────────────────────────────────┐
 │                          Host Mode                               │
 │  ┌───────────────────────┐      ┌─────────────────────────────┐ │
-│  │  cursor-browser-ext   │      │      Demo Recorder          │ │
-│  │  (opens real browser) │◄────▶│      MCP (FFmpeg)           │ │
-│  │                       │      │   AVFoundation/gdigrab      │ │
+│  │    Playwright MCP     │      │      Demo Recorder          │ │
+│  │  (separate server)    │◄────▶│      MCP (FFmpeg)           │ │
+│  │  browser automation   │      │   AVFoundation/gdigrab      │ │
 │  └───────────────────────┘      └─────────────────────────────┘ │
-│                                          │                       │
-│                  native screen capture ◄─┘                       │
+│            │                             │                       │
+│            ▼                             │                       │
+│  ┌───────────────────────┐               │                       │
+│  │  Chrome/Firefox/etc   │               │                       │
+│  │   (real browser)      │◄──────────────┘                       │
+│  └───────────────────────┘   native screen capture               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -204,8 +231,11 @@ Host mode uses **cursor-browser-extension** for browser automation - the demo-re
 |------|-------------|
 | `list_windows` | List visible windows |
 | `window_tools` | Check window management tool availability |
+| `fullscreen_window` | Make browser window fullscreen (**host mode only**) |
 
 **Container mode** also includes all 22 **Playwright browser tools** (`browser_navigate`, `browser_click`, `browser_snapshot`, etc.) through the proxy multiplexer.
+
+**Host mode** works best with Playwright MCP installed separately (see [Host Mode setup](#option-3-host-mode-native)).
 
 ## Project Structure
 
@@ -280,6 +310,8 @@ stop_recording()
 
 ## Complete Example
 
+### Container Mode
+
 ```python
 # === SETUP ===
 browser_navigate(url="https://example.com")
@@ -290,6 +322,42 @@ browser_snapshot()
 start_recording(filename="scene1_raw.mp4")
 browser_wait_for(time=2)
 browser_scroll(direction="down", amount=400)
+browser_wait_for(time=2)
+stop_recording()
+
+text_to_speech(
+    text="Welcome. As we scroll down, see the key features.",
+    filename="scene1_audio.mp3"
+)
+
+adjust_video_to_audio(
+    video_filename="scene1_raw.mp4",
+    audio_filename="scene1_audio.mp3",
+    output_filename="scene1_final.mp4"
+)
+
+# === FINAL ===
+concatenate_videos(
+    filenames=["scene1_final.mp4", "scene2_final.mp4"],
+    output_filename="demo_final.mp4"
+)
+
+media_info(filename="demo_final.mp4")
+```
+
+### Host Mode (with Playwright MCP)
+
+```python
+# === SETUP ===
+browser_navigate(url="https://example.com")
+fullscreen_window()  # Host mode exclusive - make browser fullscreen
+browser_wait_for(time=2)  # Wait for fullscreen animation (especially on macOS)
+
+# === SCENE 1: Homepage ===
+browser_snapshot()
+start_recording(filename="scene1_raw.mp4")
+browser_wait_for(time=2)
+browser_evaluate(function='() => { window.scrollBy({ top: 400, behavior: "smooth" }); }')
 browser_wait_for(time=2)
 stop_recording()
 
